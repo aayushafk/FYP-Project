@@ -10,6 +10,7 @@ const VolunteerDashboard = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [notifications, setNotifications] = useState([]);
+    const [availableHelpRequests, setAvailableHelpRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [deletingId, setDeletingId] = useState(null);
     const [eventParticipationStatus, setEventParticipationStatus] = useState({});
@@ -40,12 +41,28 @@ const VolunteerDashboard = () => {
             const eventNotifications = response.data.filter(n => n.type === 'skill_matched_event');
             setNotifications(eventNotifications);
             
+            // Fetch available help requests (citizen requests)
+            await fetchAvailableHelpRequests();
+            
             // Fetch participation status for each event
             await fetchParticipationStatuses(eventNotifications);
         } catch (error) {
             console.error('Error fetching notifications:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchAvailableHelpRequests = async () => {
+        try {
+            const response = await api.get('/volunteer/available-events');
+            // Filter to show only citizen help requests that are pending
+            const helpRequests = (response.data.events || []).filter(
+                event => event.type === 'citizen' && event.trackingStatus === 'Pending'
+            );
+            setAvailableHelpRequests(helpRequests);
+        } catch (error) {
+            console.error('Error fetching available help requests:', error);
         }
     };
 
@@ -377,6 +394,106 @@ const VolunteerDashboard = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Available Help Requests Section */}
+                {availableHelpRequests.length > 0 && (
+                    <div className="mt-12 animate-slideInRight">
+                        <div className="mb-8">
+                            <div className="flex items-center gap-3 mb-2">
+                                <span className="text-3xl">🆘</span>
+                                <h2 className="text-3xl font-bold text-gray-900">Help Requests</h2>
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-4 py-2 rounded-full font-bold text-lg border-2 border-amber-300">
+                                    {availableHelpRequests.length}
+                                </span>
+                            </div>
+                            <p className="text-lg text-gray-600 font-medium ml-9">Citizens in need of your assistance</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {availableHelpRequests.map((request, index) => (
+                                <div
+                                    key={request._id}
+                                    className={`bg-white rounded-xl shadow-sm border hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-6 group animate-slideInUp ${
+                                        request.isEmergency ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                                    }`}
+                                    style={{animationDelay: `${index * 0.05}s`}}
+                                >
+                                    {/* Emergency Badge */}
+                                    {request.isEmergency && (
+                                        <div className="mb-3 flex items-center gap-2">
+                                            <span className="inline-flex items-center gap-1 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase">
+                                                🚨 EMERGENCY
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Request Title */}
+                                    <h3 className="text-xl font-bold text-gray-900 mb-4 line-clamp-2 group-hover:text-amber-600 transition-colors">
+                                        {request.title}
+                                    </h3>
+
+                                    {/* Request Details */}
+                                    <div className="space-y-3 mb-6">
+                                        {request.category && (
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-gray-500">📋</span>
+                                                <span className="text-gray-700 font-medium">{request.category}</span>
+                                            </div>
+                                        )}
+                                        
+                                        {request.location && (
+                                            <div className="flex items-center gap-3">
+                                                <MapPin size={18} className="text-red-500 flex-shrink-0" />
+                                                <span className="text-gray-700 font-medium">{request.location}</span>
+                                            </div>
+                                        )}
+
+                                        {request.createdBy && (
+                                            <div className="flex items-center gap-3">
+                                                <Users size={18} className="text-blue-500 flex-shrink-0" />
+                                                <span className="text-gray-700 font-medium">
+                                                    Requested by {request.createdBy.fullName || 'Citizen'}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Matched Skills */}
+                                    {request.matchingSkills && request.matchingSkills.length > 0 && (
+                                        <div className="mb-6 pb-6 border-t border-gray-200 pt-4">
+                                            <p className="text-xs text-gray-600 font-semibold mb-3 uppercase tracking-wide">Your Matching Skills</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {request.matchingSkills.map(skill => (
+                                                    <span
+                                                        key={skill}
+                                                        className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-medium border border-green-300 hover:shadow-sm hover:scale-105 transition-all duration-200"
+                                                    >
+                                                        ✓ {skill}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-3 pt-4 border-t border-gray-200">
+                                        <button
+                                            onClick={() => navigate(`/event/${request._id}`)}
+                                            className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold py-3 px-4 rounded-lg hover:from-amber-600 hover:to-orange-600 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-base shadow-sm"
+                                        >
+                                            <span className="flex items-center justify-center gap-2">
+                                                View & Respond
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Participation Decision Modal */}

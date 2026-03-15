@@ -1,10 +1,13 @@
 import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import jwt from 'jsonwebtoken'
 import http from 'http'
 import { Server } from 'socket.io'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
+import { JWT_SECRET } from './config/env.js'
 import authRoutes from './routes/authRoutes.js'
 import requestRoutes from './routes/requestRoutes.js'
 import citizenRoutes from './routes/citizenRoutes.js'
@@ -20,7 +23,9 @@ import EventMessage from './models/EventMessage.js'
 import UserVolunteerMessage from './models/UserVolunteerMessage.js'
 import Event from './models/Event.js'
 
-dotenv.config()
+// Get __dirname equivalent for ES6 modules
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // Debug: Log JWT_SECRET to ensure it's loaded
 console.log('🔑 JWT_SECRET loaded:', process.env.JWT_SECRET ? 'YES' : 'NO')
@@ -46,11 +51,8 @@ io.use(async (socket, next) => {
     return next() // Always allow connection
   }
 
-  // Get JWT_SECRET with fallback
-  const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key_change_this'
-
   try {
-    const decoded = jwt.verify(token, jwtSecret)
+    const decoded = jwt.verify(token, JWT_SECRET)
     
     // Import User model to fetch full user data
     const User = mongoose.model('User')
@@ -86,7 +88,7 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 // Serve static files from uploads directory
-app.use('/uploads', express.static('uploads'))
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')))
 
 // Routes
 app.use('/api/auth', authRoutes)

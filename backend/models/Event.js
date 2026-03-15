@@ -21,6 +21,11 @@ const eventSchema = new mongoose.Schema({
         required: true,
         default: 'organizer'
     },
+    // Emergency flag for help requests
+    isEmergency: {
+        type: Boolean,
+        default: false
+    },
     // Timing
     startDateTime: {
         type: Date,
@@ -128,7 +133,34 @@ const eventSchema = new mongoose.Schema({
         completedAt: {
             type: Date,
             default: null
-        }
+        },
+        ratings: [{
+            ratedBy: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User',
+                required: true
+            },
+            role: {
+                type: String,
+                enum: ['citizen', 'organizer'],
+                required: true
+            },
+            rating: {
+                type: Number,
+                required: true,
+                min: 1,
+                max: 5
+            },
+            feedback: {
+                type: String,
+                required: true,
+                minlength: 10
+            },
+            createdAt: {
+                type: Date,
+                default: Date.now
+            }
+        }]
     }],
     tags: {
         type: [String],

@@ -28,6 +28,15 @@ const ParticipationDecisionModal = ({ isOpen, onClose, event, onDecision }) => {
 
     const handleDecision = async (participationDecision) => {
         try {
+            // Check volunteer limit before accepting
+            if (participationDecision === 'Accepted' && 
+                event.volunteersNeeded > 0 && 
+                event.assignedVolunteers?.length >= event.volunteersNeeded) {
+                alert('Volunteer limit reached. The required number of volunteers for this event is already full.');
+                handleClose();
+                return;
+            }
+
             setIsSubmitting(true);
             setDecision(participationDecision);
 
@@ -165,11 +174,36 @@ const ParticipationDecisionModal = ({ isOpen, onClose, event, onDecision }) => {
                         {event.volunteersNeeded && (
                             <div className="flex items-start gap-3">
                                 <Users size={20} className="text-orange-500 flex-shrink-0 mt-0.5" />
-                                <div>
+                                <div className="flex-1">
                                     <p className="text-sm text-gray-600 font-medium">Volunteers Needed</p>
                                     <p className="text-gray-900 font-semibold">
                                         {event.volunteersNeeded} volunteer{event.volunteersNeeded !== 1 ? 's' : ''}
                                     </p>
+                                    {event.volunteersNeeded > 0 && (
+                                        <div className="mt-2">
+                                            <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                                <span>{event.assignedVolunteers?.length || 0} joined</span>
+                                                <span>
+                                                    {event.volunteersNeeded - (event.assignedVolunteers?.length || 0)} spots left
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div
+                                                    className={`h-2 rounded-full transition-all ${
+                                                        (event.assignedVolunteers?.length || 0) >= event.volunteersNeeded
+                                                            ? 'bg-red-500'
+                                                            : 'bg-green-500'
+                                                    }`}
+                                                    style={{
+                                                        width: `${Math.min(
+                                                            ((event.assignedVolunteers?.length || 0) / event.volunteersNeeded) * 100,
+                                                            100
+                                                        )}%`
+                                                    }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -201,11 +235,27 @@ const ParticipationDecisionModal = ({ isOpen, onClose, event, onDecision }) => {
                     <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
                         <button
                             onClick={() => handleDecision('Accepted')}
-                            disabled={isSubmitting}
-                            className="flex-1 bg-green-600 text-white font-bold py-4 px-6 rounded-xl hover:bg-green-700 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
+                            disabled={
+                                isSubmitting || 
+                                (event.volunteersNeeded > 0 && event.assignedVolunteers?.length >= event.volunteersNeeded)
+                            }
+                            className={`flex-1 font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-lg ${
+                                event.volunteersNeeded > 0 && event.assignedVolunteers?.length >= event.volunteersNeeded
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    : 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed'
+                            }`}
+                            title={
+                                event.volunteersNeeded > 0 && event.assignedVolunteers?.length >= event.volunteersNeeded
+                                    ? 'Volunteer limit reached'
+                                    : ''
+                            }
                         >
                             <CheckCircle size={24} />
-                            {isSubmitting && decision === 'Accepted' ? 'Processing...' : 'Yes, I\'ll Participate!'}
+                            {event.volunteersNeeded > 0 && event.assignedVolunteers?.length >= event.volunteersNeeded
+                                ? 'Event Full'
+                                : isSubmitting && decision === 'Accepted' 
+                                    ? 'Processing...' 
+                                    : 'Yes, I\'ll Participate!'}
                         </button>
                         <button
                             onClick={() => handleDecision('Declined')}

@@ -30,7 +30,20 @@ const isVerified = (req, res, next) => {
 router.get('/my-events', isVerified, organizerController.getMyEvents);
 router.get('/event/:eventId/details', isVerified, organizerController.getEventDetails);
 router.put('/event/:eventId/update', isVerified, organizerController.updateEvent);
-router.get('/help-requests', isVerified, organizerController.getAllRequests);
+router.get('/help-requests', isVerified, async (req, res) => {
+    try {
+        // Only return requests from the OLD Request model system
+        // NOT citizen help requests from the Event model
+        const requests = await Request.find()
+            .populate('createdBy', 'fullName email phoneNumber')
+            .populate('assignedTo', 'fullName skills')
+            .sort({ createdAt: -1 });
+        res.json({ requests });
+    } catch (error) {
+        console.error('Error fetching organizer requests:', error);
+        res.status(500).json({ message: 'Error fetching requests', error: error.message });
+    }
+});
 
 // POST /api/organizer/event – Create a new event
 router.post('/event', isVerified, async (req, res) => {
@@ -141,16 +154,6 @@ router.get('/events', async (req, res) => {
         res.json(events);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching events', error: error.message });
-    }
-});
-
-// GET /api/organizer/requests – View all community help requests
-router.get('/requests', async (req, res) => {
-    try {
-        const requests = await Request.find().populate('createdBy', 'fullName email').sort({ createdAt: -1 });
-        res.json(requests);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching requests', error: error.message });
     }
 });
 

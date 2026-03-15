@@ -1,10 +1,11 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import Notification from '../models/Notification.js'
+import { JWT_SECRET } from '../config/env.js'
 
 // Generate JWT Token
 export const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key-change-in-production', {
+  return jwt.sign({ userId }, JWT_SECRET, {
     expiresIn: '30d'
   })
 }
@@ -246,6 +247,13 @@ export const loginUser = async (req, res) => {
       console.log('Role mismatch:', { expected: user.role, received: role })
       return res.status(401).json({
         message: 'Role does not match. Please select the correct role.'
+      })
+    }
+
+    // Check if account is disabled
+    if (user.isDisabled) {
+      return res.status(403).json({
+        message: 'Your account has been disabled. Please contact the administrator.'
       })
     }
 

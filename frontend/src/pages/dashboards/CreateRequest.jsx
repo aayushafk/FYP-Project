@@ -34,6 +34,7 @@ const CreateRequest = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
         setError('');
         setIsLoading(true);
 
@@ -97,13 +98,12 @@ const CreateRequest = () => {
                             </div>
 
                             <Input
-                                label="Location"
+                                label="Location (Optional)"
                                 name="location"
                                 value={formData.location}
                                 onChange={handleChange}
-                                placeholder="e.g., 123 Main St, Apt 4B, City"
-                                required
-                                helpText="Be as specific as possible to help volunteers find you."
+                                placeholder="e.g., 123 Main St, Apt 4B, City (optional)"
+                                helpText="You can type an address."
                             />
 
                             {/* Image Upload Placeholder */}

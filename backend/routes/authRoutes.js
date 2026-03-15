@@ -3,12 +3,13 @@ import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import Notification from '../models/Notification.js'
 import { authMiddleware } from '../middlewares/authMiddleware.js'
+import { JWT_SECRET } from '../config/env.js'
 
 const router = express.Router()
 
 // Generate JWT Token
 const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key-change-in-production', {
+  return jwt.sign({ userId }, JWT_SECRET, {
     expiresIn: '30d'
   })
 }

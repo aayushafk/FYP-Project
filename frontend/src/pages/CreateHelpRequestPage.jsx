@@ -35,18 +35,19 @@ const CreateHelpRequestPage = () => {
     'Other'
   ];
 
+  // Skills matching backend SKILL_LIST
   const commonSkills = [
+    'General Support',
     'First Aid',
-    'CPR',
-    'Cooking',
-    'Driving',
-    'Languages',
-    'Counseling',
-    'Teaching',
-    'Repair Work',
-    'IT Support',
-    'Legal Knowledge',
-    'Medical Training'
+    'Medical Assistance',
+    'Food Distribution',
+    'Logistics & Transport',
+    'Crowd Management',
+    'Teaching & Tutoring',
+    'Disaster Relief',
+    'Counseling Support',
+    'Technical Support',
+    'Translation'
   ];
 
   const handleInputChange = (e) => {
@@ -76,8 +77,8 @@ const CreateHelpRequestPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!formData.title || !formData.description || !formData.location) {
+
+    if (!formData.title || !formData.description) {
       showToast({ type: 'error', message: 'Please fill in all required fields' });
       return;
     }
@@ -86,13 +87,22 @@ const CreateHelpRequestPage = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       
+      // Build request body with location data
+      const requestBody = {
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        requiredSkills: formData.requiredSkills,
+        location: formData.location,
+      };
+      
       const response = await fetch(`${API_BASE_URL}/citizen/request`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -183,7 +193,7 @@ const CreateHelpRequestPage = () => {
         {/* Location */}
         <div>
           <label htmlFor="location" className="block text-sm font-semibold text-gray-700 mb-2">
-            Location *
+            Location (Optional)
           </label>
           <input
             type="text"
@@ -191,8 +201,7 @@ const CreateHelpRequestPage = () => {
             name="location"
             value={formData.location}
             onChange={handleInputChange}
-            placeholder="Enter your location or address"
-            required
+            placeholder="Enter your location or address (optional)"
             className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>

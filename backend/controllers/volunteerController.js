@@ -23,21 +23,54 @@ export const getAvailableEvents = async (req, res) => {
     .populate('assignedVolunteers', 'fullName skills')
     .sort({ createdAt: -1 });
 
-    // ONLY show events that match volunteer's skills
+    // Filter and match events based on volunteer's skills OR "General Support"
     const matchedEvents = allEvents
       .map(event => {
+        // Check if event has "General Support" in required skills
+        const hasGeneralSupport = event.requiredSkills && event.requiredSkills.includes('General Support');
+        
+        // Check if volunteer's skills match event's required skills
         const matchingSkills = event.requiredSkills.filter(
           skill => volunteer.skills.includes(skill)
         );
+        
+        // Event is matched if: has General Support OR has matching skills
+        const isMatched = hasGeneralSupport || matchingSkills.length > 0;
+        
         return {
           ...event.toObject(),
-          matchingSkills,
-          matchCount: matchingSkills.length,
-          isMatched: matchingSkills.length > 0
+          matchingSkills: hasGeneralSupport ? ['General Support'] : matchingSkills,
+          matchCount: hasGeneralSupport ? 1 : matchingSkills.length,
+          isMatched: isMatched,
+          hasGeneralSupport: hasGeneralSupport
         };
       })
-      .filter(event => event.isMatched) // Only include matched events
-      .sort((a, b) => b.matchCount - a.matchCount);
+      .filter(event => {
+        // Only include matched events
+        if (!event.isMatched) return false;
+        
+        // For citizen help requests, only show if trackingStatus is Pending
+        if (event.type === 'citizen') {
+          return event.trackingStatus === 'Pending';
+        }
+        
+        // For organizer events, show if they match skills
+        return true;
+      })
+      .filter(event => {
+        // Exclude events where volunteer is already assigned
+        const assignedVolunteerIds = event.assignedVolunteers.map(v => v._id ? v._id.toString() : v.toString());
+        return !assignedVolunteerIds.includes(volunteer._id.toString());
+      })
+      .sort((a, b) => {
+        // Sort by emergency first (emergency requests at top)
+        if (a.isEmergency && !b.isEmergency) return -1;
+        if (!a.isEmergency && b.isEmergency) return 1;
+        // Then by match count (better skill matches first)
+        if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+        // Finally by date (newest first)
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
 
     res.json({ events: matchedEvents });
   } catch (error) {
@@ -84,11 +117,25 @@ export const acceptEvent = async (req, res) => {
         });
       }
       
+      // Check volunteer limit before allowing previously declined volunteer to re-accept
+      if (event.volunteersNeeded > 0 && event.assignedVolunteers.length >= event.volunteersNeeded) {
+        return res.status(400).json({ 
+          message: 'Volunteer limit reached. The required number of volunteers for this event is already full.'
+        });
+      }
+      
       // If previously declined, update to accepted
       event.volunteerAssignments[existingAssignmentIndex].participationStatus = 'Accepted';
       event.volunteerAssignments[existingAssignmentIndex].status = 'Assigned';
       event.volunteerAssignments[existingAssignmentIndex].assignedAt = new Date();
     } else {
+      // Check volunteer limit before creating new assignment
+      if (event.volunteersNeeded > 0 && event.assignedVolunteers.length >= event.volunteersNeeded) {
+        return res.status(400).json({ 
+          message: 'Volunteer limit reached. The required number of volunteers for this event is already full.'
+        });
+      }
+      
       // Create new assignment
       event.volunteerAssignments.push({
         volunteerId: req.user._id,

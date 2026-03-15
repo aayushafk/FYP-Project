@@ -77,41 +77,63 @@ router.get('/skills/available', async (req, res) => {
 });
 
 // GET /api/volunteer/profile/ratings – Get volunteer's rating summary
-router.get('/profile/ratings', async (req, res) => {
+router.get('/profile/ratings', authMiddleware, async (req, res) => {
     try {
-        const user = await User.findById(req.user._id)
-            .select('ratings fullName')
-            .populate('ratings.eventId', 'title')
-            .populate('ratings.givenByUserId', 'fullName role');
+        const volunteerId = req.user._id;
 
-        // Handle case where ratings array doesn't exist or is empty
-        const ratings = user.ratings || [];
+        // Find all events where this volunteer participated
+        const events = await Event.find({
+            'volunteerAssignments.volunteerId': volunteerId
+        })
+        .populate('volunteerAssignments.ratings.ratedBy', 'fullName role')
+        .select('title volunteerAssignments');
+
+        // Extract all ratings for this volunteer from all events
+        let allRatings = [];
+        
+        events.forEach(event => {
+            const volunteerAssignment = event.volunteerAssignments.find(
+                va => va.volunteerId.toString() === volunteerId.toString()
+            );
+            
+            if (volunteerAssignment && volunteerAssignment.ratings && volunteerAssignment.ratings.length > 0) {
+                volunteerAssignment.ratings.forEach(rating => {
+                    allRatings.push({
+                        stars: rating.rating,
+                        comment: rating.feedback,
+                        raterRole: rating.role,
+                        eventTitle: event.title,
+                        createdAt: rating.createdAt
+                    });
+                });
+            }
+        });
 
         // Calculate aggregations
-        const ratingCount = ratings.length;
+        const ratingCount = allRatings.length;
         const avgRating = ratingCount > 0
-            ? (ratings.reduce((sum, r) => sum + r.stars, 0) / ratingCount).toFixed(1)
+            ? (allRatings.reduce((sum, r) => sum + r.stars, 0) / ratingCount).toFixed(1)
             : 0;
 
         // Rating breakdown
         const ratingBreakdown = {
-            5: ratings.filter(r => r.stars === 5).length,
-            4: ratings.filter(r => r.stars === 4).length,
-            3: ratings.filter(r => r.stars === 3).length,
-            2: ratings.filter(r => r.stars === 2).length,
-            1: ratings.filter(r => r.stars === 1).length
+            5: allRatings.filter(r => r.stars === 5).length,
+            4: allRatings.filter(r => r.stars === 4).length,
+            3: allRatings.filter(r => r.stars === 3).length,
+            2: allRatings.filter(r => r.stars === 2).length,
+            1: allRatings.filter(r => r.stars === 1).length
         };
 
-        // Recent feedback (last 5)
-        const recentFeedback = ratings
+        // Recent feedback (last 3)
+        const recentFeedback = allRatings
             .filter(r => r.comment && r.comment.trim().length > 0)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-            .slice(0, 5)
+            .slice(0, 3)
             .map(r => ({
                 stars: r.stars,
                 comment: r.comment,
-                raterRole: r.role,
-                eventTitle: r.eventId?.title || 'Event',
+                raterRole: r.raterRole,
+                eventTitle: r.eventTitle || 'Event',
                 createdAt: r.createdAt
             }));
 

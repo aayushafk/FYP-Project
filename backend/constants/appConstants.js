@@ -2,7 +2,6 @@
 export const VALID_ROLES = ['citizen', 'volunteer', 'organizer', 'admin']
 
 export const SKILL_LIST = [
-  'General Support',
   'First Aid',
   'Medical Assistance',
   'Food Distribution',

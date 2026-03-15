@@ -44,32 +44,30 @@ const VolunteerDashboard = () => {
 
   const fetchVolunteerData = async () => {
     try {
-      // Placeholder API calls
-      // const availableResponse = await api.get('/events/available')
-      // const myEventsResponse = await api.get('/volunteer/my-events')
-      // const statsResponse = await api.get('/volunteer/stats')
+      // Fetch available events and help requests
+      const availableResponse = await api.get('/volunteer/available-events');
+      const myEventsResponse = await api.get('/volunteer/my-events');
       
-      // Mock data
-      setAvailableEvents([
-        { id: 1, title: 'Community Cleanup Day', date: '2024-02-15', location: 'Central Park', volunteersNeeded: 20, skills: ['General Support', 'Logistics'] },
-        { id: 2, title: 'Food Drive', date: '2024-02-20', location: 'Community Center', volunteersNeeded: 15, skills: ['Food Service', 'Transportation'] },
-        { id: 3, title: 'Medical Outreach', date: '2024-02-18', location: 'Health Clinic', volunteersNeeded: 10, skills: ['Medical', 'Communication'] }
-      ])
+      setAvailableEvents(availableResponse.data.events || []);
+      setMyEvents(myEventsResponse.data.events || []);
       
-      setMyEvents([
-        { id: 4, title: 'Emergency Response Training', date: '2024-02-10', location: 'City Hall', status: 'confirmed', hours: 4 },
-        { id: 5, title: 'Shelter Setup', date: '2024-02-12', location: 'Community Center', status: 'confirmed', hours: 6 }
-      ])
+      // Calculate stats
+      const completedEvents = myEventsResponse.data.events.filter(e => {
+        const assignment = e.volunteerAssignments?.find(
+          a => a.volunteerId?._id === authUser._id || a.volunteerId === authUser._id
+        );
+        return assignment?.status === 'Completed';
+      });
       
       setStats({
-        totalHours: 25,
-        eventsAttended: 8,
-        upcomingEvents: 2
-      })
+        totalHours: completedEvents.length * 4, // Estimate 4 hours per event
+        eventsAttended: completedEvents.length,
+        upcomingEvents: myEventsResponse.data.events.filter(e => e.status !== 'completed').length
+      });
     } catch (error) {
-      console.error('Error fetching data:', error)
+      console.error('Error fetching data:', error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   }
 
@@ -82,12 +80,16 @@ const VolunteerDashboard = () => {
 
   const handleJoinEvent = async (eventId) => {
     try {
-      // await api.post(`/events/${eventId}/join`)
-      alert(`Successfully joined event!`)
-      fetchVolunteerData()
+      await api.post(`/volunteer/event/${eventId}/accept`);
+      showToast({ type: 'success', message: 'Successfully joined!' });
+      fetchVolunteerData();
     } catch (error) {
-      alert('Failed to join event. Please try again.')
+      showToast({ type: 'error', message: error.response?.data?.message || 'Failed to join. Please try again.' });
     }
+  }
+
+  const showToast = ({ type, message }) => {
+    alert(message); // Simple alert for now, can be replaced with proper toast
   }
 
   if (isLoading) {
@@ -103,6 +105,21 @@ const VolunteerDashboard = () => {
 
   return (
     <div className="full-height page-background">
+      {/* CSS for pulse animation */}
+      <style>{`
+        @keyframes emergency-pulse {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+          }
+          50% {
+            box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+          }
+        }
+        .emergency-card {
+          animation: emergency-pulse 2s ease-in-out infinite;
+        }
+      `}</style>
+      
       {/* Header */}
       <header className="white-background shadow-sm border-b border-gray-200">
         <div style={{maxWidth: '80rem', margin: '0 auto'}} className="px-4 py-4">
@@ -146,40 +163,99 @@ const VolunteerDashboard = () => {
           {/* Available Events */}
           <div className="white-background rounded-lg shadow-lg p-6">
             <div className="flex-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-800">Available Events</h2>
-              <span className="text-sm text-gray-500">{availableEvents.length} events</span>
+              <h2 className="text-xl font-semibold text-gray-800">Available Opportunities</h2>
+              <span className="text-sm text-gray-500">{availableEvents.length} opportunities</span>
             </div>
             <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
               {availableEvents.map((event) => (
-                <div key={event.id} className="border border-gray-200 rounded-lg p-4">
+                <div 
+                  key={event._id} 
+                  className={`border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer ${
+                    event.isEmergency && event.type === 'citizen' 
+                      ? 'border-red-400 bg-red-50 emergency-card' 
+                      : 'border-gray-200'
+                  }`}
+                  onClick={() => navigate(`/event/${event._id}`)}
+                  style={event.isEmergency && event.type === 'citizen' ? {
+                    borderWidth: '2px',
+                    backgroundColor: '#fef2f2'
+                  } : {}}
+                >
+                  {/* Emergency Badge */}
+                  {event.isEmergency && event.type === 'citizen' && (
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="text-sm font-bold bg-red-600 text-white px-3 py-1.5 rounded shadow-md uppercase tracking-wide">
+                        🚨 EMERGENCY
+                      </span>
+                      <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-1 rounded">
+                        Immediate Response Needed
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Type Badge */}
+                  <div className="flex items-center gap-2 mb-2">
+                    {event.type === 'citizen' ? (
+                      <span className="text-xs font-semibold bg-teal-100 text-teal-800 px-2 py-1 rounded">
+                        🧑‍💼 From Citizen
+                      </span>
+                    ) : (
+                      <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                        📅 Organizer Event
+                      </span>
+                    )}
+                  </div>
+                  
                   <h3 className="font-medium text-gray-800 mb-2">{event.title}</h3>
+                  
+                  {/* Creator Name for Citizen Requests */}
+                  {event.type === 'citizen' && event.createdBy && (
+                    <div className="text-xs text-gray-600 mb-2">
+                      By: {event.createdBy.fullName || 'Citizen'}
+                    </div>
+                  )}
+                  
                   <div className="flex items-center text-sm text-gray-600 gap-4 mb-2">
-                    <span>📅 {event.date}</span>
                     <span>📍 {event.location}</span>
                   </div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                      {event.volunteersNeeded} volunteers needed
-                    </span>
-                    <div className="flex gap-1">
-                      {event.skills.map((skill, idx) => (
+                  
+                  <p className="text-xs text-gray-500 mb-3 line-clamp-2">{event.description}</p>
+                  
+                  {event.requiredSkills?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {event.requiredSkills.slice(0, 3).map((skill, idx) => (
                         <span key={idx} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
                           {skill}
                         </span>
                       ))}
+                      {event.requiredSkills.length > 3 && (
+                        <span className="text-xs text-gray-500">+{event.requiredSkills.length - 3} more</span>
+                      )}
                     </div>
+                  )}
+                  
+                  <div className="text-xs text-gray-500 mb-3">
+                    Created: {new Date(event.createdAt).toLocaleDateString()}
                   </div>
+                  
                   <button
-                    onClick={() => handleJoinEvent(event.id)}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleJoinEvent(event._id);
+                    }}
+                    className={`px-4 py-2 text-white rounded-lg font-medium transition-colors ${
+                      event.isEmergency && event.type === 'citizen'
+                        ? 'bg-red-600 hover:bg-red-700'
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
                     style={{width: '100%'}}
                   >
-                    Join Event
+                    {event.isEmergency && event.type === 'citizen' ? '🚨 Respond Immediately' : '✅ Participate'}
                   </button>
                 </div>
               ))}
               {availableEvents.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No available events</p>
+                <p className="text-gray-500 text-center py-4">No available opportunities</p>
               )}
             </div>
           </div>
@@ -187,32 +263,66 @@ const VolunteerDashboard = () => {
           {/* My Events */}
           <div className="white-background rounded-lg shadow-lg p-6">
             <div className="flex-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-800">My Events</h2>
+              <h2 className="text-xl font-semibold text-gray-800">My Participations</h2>
               <span className="text-sm text-gray-500">{myEvents.length} events</span>
             </div>
             <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
-              {myEvents.map((event) => (
-                <div key={event.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex-between mb-2">
-                    <h3 className="font-medium text-gray-800">{event.title}</h3>
-                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
-                      {event.status}
-                    </span>
+              {myEvents.map((event) => {
+                const myAssignment = event.volunteerAssignments?.find(
+                  a => a.volunteerId?._id === authUser._id || a.volunteerId === authUser._id
+                );
+                const myStatus = myAssignment?.status || 'Pending';
+                
+                return (
+                  <div 
+                    key={event._id} 
+                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => navigate(`/event/${event._id}`)}
+                  >
+                    {/* Type Badge */}
+                    <div className="flex items-center gap-2 mb-2">
+                      {event.type === 'citizen' ? (
+                        <span className="text-xs font-semibold bg-teal-100 text-teal-800 px-2 py-1 rounded">
+                          🧑‍💼 Help Request
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                          📅 Event
+                        </span>
+                      )}
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        myStatus === 'Completed' ? 'bg-green-100 text-green-700' :
+                        myStatus === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                        myStatus === 'Assigned' ? 'bg-purple-100 text-purple-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {myStatus}
+                      </span>
+                    </div>
+                    
+                    <h3 className="font-medium text-gray-800 mb-2">{event.title}</h3>
+                    <div className="flex items-center text-sm text-gray-600 gap-4 mb-2">
+                      <span>📍 {event.location}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-xs text-gray-500">
+                        {new Date(event.createdAt).toLocaleDateString()}
+                      </span>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/event/${event._id}`);
+                        }}
+                        className="text-sm text-primary-600 font-medium hover:text-primary-700"
+                      >
+                        View Details →
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center text-sm text-gray-600 gap-4 mb-2">
-                    <span>📅 {event.date}</span>
-                    <span>📍 {event.location}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Hours: {event.hours}</span>
-                    <button className="text-sm text-primary-600 font-medium">
-                      View Details →
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {myEvents.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No events joined yet</p>
+                <p className="text-gray-500 text-center py-4">No participations yet</p>
               )}
             </div>
           </div>

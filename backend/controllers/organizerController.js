@@ -177,22 +177,3 @@ export const updateEvent = async (req, res) => {
   }
 };
 
-/**
- * Get all help requests (citizen-created)
- */
-export const getAllRequests = async (req, res) => {
-  try {
-    const requests = await Event.find({ type: 'citizen' })
-      .populate('createdBy', 'fullName email phoneNumber')
-      .populate('assignedVolunteers', 'fullName skills')
-      .sort({ createdAt: -1 });
-
-    res.json({ requests });
-  } catch (error) {
-    console.error('Error fetching requests:', error);
-    res.status(500).json({ 
-      message: 'Error fetching requests', 
-      error: error.message 
-    });
-  }
-};

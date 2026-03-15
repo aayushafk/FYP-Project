@@ -73,8 +73,22 @@ export const SKILLS = {
   ]
 }
 
-// Get all skills as flat array
-export const SKILL_LIST = Object.values(SKILLS).flat()
+// Get all skills as flat array (keeping for backward compatibility)
+const ALL_SKILLS = Object.values(SKILLS).flat()
+
+// Skills for citizen help requests
+export const SKILL_LIST = [
+  'First Aid',
+  'Medical Assistance',
+  'Food Distribution',
+  'Logistics & Transport',
+  'Crowd Management',
+  'Teaching & Tutoring',
+  'Disaster Relief',
+  'Counseling Support',
+  'Technical Support',
+  'Translation'
+]
 
 // Skill Levels
 export const SKILL_LEVELS = {

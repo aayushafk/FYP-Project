@@ -6,8 +6,9 @@ import { SKILL_LIST } from '../../constants/skills';
 import {
     Calendar, MapPin, Users, Clock, Plus, MessageCircle,
     Search, ChevronRight, AlertCircle, CheckCircle,
-    ArrowLeft, Send, Home, FileText, Activity, Bell, ExternalLink, Trash2
+    ArrowLeft, Send, Home, FileText, Activity, Bell, ExternalLink, Trash2, BarChart3
 } from 'lucide-react';
+import CitizenHelpRequestAnalytics from '../../components/analytics/CitizenHelpRequestAnalytics';
 
 const UserDashboard = () => {
     const { user } = useAuth();
@@ -82,7 +83,7 @@ const UserDashboard = () => {
 
     const fetchEvents = async () => {
         try {
-            const response = await api.get('/events');
+            const response = await api.get('/citizen/events');
             setEvents(Array.isArray(response.data) ? response.data : response.data.events || []);
         } catch (err) {
             console.error('Error fetching events:', err);
@@ -114,6 +115,7 @@ const UserDashboard = () => {
     // Help request creation
     const handleCreateRequest = async (e) => {
         e.preventDefault();
+        
         setRequestSubmitting(true);
         setError(null); // Clear previous errors
         try {
@@ -216,17 +218,38 @@ const UserDashboard = () => {
         }
     };
 
-    const filteredEvents = events.filter(event =>
-        event.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.location?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+    const filteredEvents = events.filter(event => {
+        if (!normalizedSearchQuery) {
+            return true;
+        }
+
+        const searchableText = [
+            event.title,
+            event.name,
+            event.description,
+            event.location,
+            event.category,
+            event.status,
+            ...(Array.isArray(event.requiredSkills)
+                ? event.requiredSkills.map(skill => (typeof skill === 'object' ? skill.name || skill.skill : skill))
+                : []),
+            ...(Array.isArray(event.tags) ? event.tags : []),
+            event.organizer?.fullName,
+            event.organizer?.name
+        ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+
+        return searchableText.includes(normalizedSearchQuery);
+    });
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: Home },
         { id: 'events', label: 'Events', icon: Calendar },
         { id: 'requests', label: 'My Requests', icon: FileText },
-        { id: 'messages', label: 'Messages', icon: MessageCircle }
+        { id: 'analytics', label: 'Analytics', icon: BarChart3 }
     ];
 
     const categories = [
@@ -421,12 +444,25 @@ const UserDashboard = () => {
                                     <div className="space-y-2">
                                         {myRequests.slice(0, 4).map(request => {
                                             const status = request.trackingStatus || request.status;
+                                            const volunteerCount = request.assignedVolunteers?.length || 0;
                                             return (
-                                                <div key={request._id} className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-all cursor-pointer group" onClick={() => navigate(`/request/${request._id}`)}>
+                                                <div key={request._id} className={`flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-all cursor-pointer group ${
+                                                    request.isEmergency ? 'border-2 border-red-200 bg-red-50' : ''
+                                                }`} onClick={() => navigate(`/event/${request._id}`)}>
                                                     <div className={`w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-offset-1 ${status === 'Pending' ? 'bg-amber-400 ring-amber-200' : status === 'In Progress' ? 'bg-teal-500 ring-teal-200' : status === 'Completed' ? 'bg-emerald-400 ring-emerald-200' : 'bg-gray-400 ring-gray-200'}`} />
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-slate-800 truncate group-hover:text-green-600 transition-colors">{request.title}</p>
-                                                        <p className="text-xs text-gray-500">{request.category} {request.createdAt && `• ${new Date(request.createdAt).toLocaleDateString()}`}</p>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <p className="text-sm font-medium text-slate-800 truncate group-hover:text-green-600 transition-colors">{request.title}</p>
+                                                            {request.isEmergency && (
+                                                                <span className="text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded uppercase">🚨 URGENT</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-xs text-gray-500">{request.category} {request.createdAt && `• ${new Date(request.createdAt).toLocaleDateString()}`}</p>
+                                                            {volunteerCount > 0 && (
+                                                                <span className="text-xs text-teal-600 font-medium">• {volunteerCount} volunteer{volunteerCount !== 1 ? 's' : ''}</span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <span className={`text-xs font-medium px-2.5 py-1 rounded-lg border whitespace-nowrap ${getStatusColor(status)}`}>{status}</span>
                                                 </div>
@@ -716,76 +752,75 @@ const UserDashboard = () => {
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    {myRequests.map(request => (
-                                        <div key={request._id} className="flex items-center gap-4 p-4 rounded-xl hover:bg-slate-50 transition-all group border border-transparent hover:border-gray-200 hover:shadow-sm">
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${
-                                                request.category === 'Medical' ? 'bg-red-50' : request.category === 'Food' ? 'bg-orange-50' : request.category === 'Rescue' ? 'bg-yellow-50' : request.category === 'Transport' ? 'bg-blue-50' : 'bg-gray-50'
+                                    {myRequests.map(request => {
+                                        const volunteerCount = request.assignedVolunteers?.length || 0;
+                                        return (
+                                            <div key={request._id} className={`flex items-center gap-4 p-4 rounded-xl hover:bg-slate-50 transition-all group border hover:border-gray-200 hover:shadow-sm ${
+                                                request.isEmergency ? 'border-2 border-red-300 bg-red-50' : 'border-transparent'
                                             }`}>
-                                                {request.category === 'Medical' ? '🏥' : request.category === 'Food' ? '🍽️' : request.category === 'Rescue' ? '🚨' : request.category === 'Transport' ? '🚗' : '📋'}
-                                            </div>
-                                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/dashboard/user/help-request/${request._id}`)}>
-                                                <h4 className="font-semibold text-slate-900 truncate group-hover:text-green-600 transition-colors">{request.title}</h4>
-                                                <p className="text-sm text-gray-500 truncate mt-0.5">{request.description}</p>
-                                                <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                                                    <span>{request.category}</span>
-                                                    {request.location && <span>• {request.location}</span>}
-                                                    {request.createdAt && <span>• {new Date(request.createdAt).toLocaleDateString()}</span>}
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${
+                                                    request.category === 'Medical' ? 'bg-red-50' : request.category === 'Food' ? 'bg-orange-50' : request.category === 'Rescue' ? 'bg-yellow-50' : request.category === 'Transport' ? 'bg-blue-50' : 'bg-gray-50'
+                                                }`}>
+                                                    {request.category === 'Medical' ? '🏥' : request.category === 'Food' ? '🍽️' : request.category === 'Rescue' ? '🚨' : request.category === 'Transport' ? '🚗' : '📋'}
                                                 </div>
+                                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/event/${request._id}`)}>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <h4 className="font-semibold text-slate-900 truncate group-hover:text-green-600 transition-colors">{request.title}</h4>
+                                                        {request.isEmergency && (
+                                                            <span className="text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded uppercase shrink-0">🚨 URGENT</span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-gray-500 truncate mt-0.5">{request.description}</p>
+                                                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                                                        <span>{request.category}</span>
+                                                        {request.location && <span>• {request.location}</span>}
+                                                        {request.createdAt && <span>• {new Date(request.createdAt).toLocaleDateString()}</span>}
+                                                        {volunteerCount > 0 && (
+                                                            <span className="text-teal-600 font-medium">• {volunteerCount} volunteer{volunteerCount !== 1 ? 's' : ''} helping</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <span className={`px-3 py-1 rounded-lg text-xs font-semibold border whitespace-nowrap ${getStatusColor(request.trackingStatus || request.status)}`}>{request.trackingStatus || request.status}</span>
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setDeleteConfirm(request);
+                                                    }}
+                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shrink-0"
+                                                    title="Delete request"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                                <ChevronRight className="text-gray-300 group-hover:text-blue-500 transition-colors shrink-0 cursor-pointer" size={16} onClick={() => navigate(`/event/${request._id}`)} />
                                             </div>
-                                            <span className={`px-3 py-1 rounded-lg text-xs font-semibold border whitespace-nowrap ${getStatusColor(request.trackingStatus || request.status)}`}>{request.trackingStatus || request.status}</span>
-                                            <button 
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setDeleteConfirm(request);
-                                                }}
-                                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shrink-0"
-                                                title="Delete request"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                            <ChevronRight className="text-gray-300 group-hover:text-blue-500 transition-colors shrink-0 cursor-pointer" size={16} onClick={() => navigate(`/dashboard/user/help-request/${request._id}`)} />
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
 
-                {/* ════════ MESSAGES TAB ════════ */}
-                {activeTab === 'messages' && (
-                    <div className="bg-white rounded-2xl shadow-md ring-1 ring-gray-200 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 border-l-4 border-l-violet-400">
-                            <h3 className="text-lg font-bold text-slate-900">Messages</h3>
-                            <p className="text-sm text-gray-500">Communicate with volunteers assigned to events</p>
-                        </div>
-                        <div className="p-6">
-                            <div className="text-center py-12">
-                                <div className="w-20 h-20 bg-violet-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                    <MessageCircle className="text-violet-600" size={32} />
-                                </div>
-                                <p className="text-slate-700 font-medium">Start a conversation from an event</p>
-                                <p className="text-sm text-gray-400 mt-1 mb-5">Browse events, then click on an assigned volunteer to chat</p>
-                                <div className="flex gap-3 justify-center">
-                                    <button onClick={() => setActiveTab('events')} className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-sm font-medium transition-all shadow-sm">Browse Events</button>
-                                    <button onClick={() => navigate('/messages')} className="px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium transition-all">Open Full Inbox</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                {/* ════════ ANALYTICS TAB ════════ */}
+                {activeTab === 'analytics' && (
+                    <CitizenHelpRequestAnalytics />
                 )}
             </div>
 
             {/* ─── Create Help Request Modal ─── */}
             {showCreateRequest && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowCreateRequest(false)}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => {
+                    setShowCreateRequest(false);
+                }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900">Create Help Request</h3>
                                 <p className="text-sm text-gray-500">Describe what you need assistance with</p>
                             </div>
-                            <button onClick={() => setShowCreateRequest(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 text-xl leading-none transition-all">&times;</button>
+                            <button onClick={() => {
+                                setShowCreateRequest(false);
+                            }} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 text-xl leading-none transition-all">&times;</button>
                         </div>
                         <form onSubmit={handleCreateRequest} className="p-6 space-y-4">
                             <div>
@@ -809,17 +844,19 @@ const UserDashboard = () => {
                                     onChange={e => setRequestForm({ ...requestForm, requiredSkills: e.target.value ? [e.target.value] : [] })} 
                                     className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white"
                                 >
-                                    <option value="">Select a skill (or leave blank for general)</option>
+                                    <option value="">Select a skill (optional)</option>
                                     {SKILL_LIST.map(skill => <option key={skill} value={skill}>{skill}</option>)}
                                 </select>
-                                <p className="text-xs text-gray-500 mt-1">Select "General Support" to notify all volunteers</p>
+                                <p className="text-xs text-gray-500 mt-1">All volunteers across multiple skills will be notified</p>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
-                                <input type="text" value={requestForm.location} onChange={e => setRequestForm({ ...requestForm, location: e.target.value })} placeholder="Your location for volunteers to find you" className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" required />
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Location (Optional)</label>
+                                <input type="text" value={requestForm.location} onChange={e => setRequestForm({ ...requestForm, location: e.target.value })} placeholder="Your location or address (optional)" className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
                             </div>
                             <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={() => setShowCreateRequest(false)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-medium transition-all">Cancel</button>
+                                <button type="button" onClick={() => {
+                                    setShowCreateRequest(false);
+                                }} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-medium transition-all">Cancel</button>
                                 <button type="submit" disabled={requestSubmitting} className="flex-1 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition-all shadow-sm flex items-center justify-center gap-2">
                                     {requestSubmitting ? (<><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Submitting...</>) : 'Submit Request'}
                                 </button>

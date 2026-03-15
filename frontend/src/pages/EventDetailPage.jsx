@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import socketService from '../services/socketService';
 import { API_BASE_URL } from '../constants/api';
-import LocationMap from '../components/messaging/LocationMap';
 
 const EventDetailPage = () => {
   const { eventId } = useParams();
@@ -124,7 +123,7 @@ const EventDetailPage = () => {
 
   // Setup socket connections
   useEffect(() => {
-    if (!event || !user) return;
+    if (!user || !eventId) return;
 
     const socket = socketService.initializeSocket();
     
@@ -137,29 +136,39 @@ const EventDetailPage = () => {
       userRole: user.role
     });
 
-    // Listen for messages
-    socketService.onReceiveMessage((message) => {
+    // Listen for messages from other users
+    const handleReceiveMessage = (message) => {
       console.log('📨 Received message via socket:', message);
-      setMessages(prev => {
-        const updated = [...prev, message];
-        console.log('💬 Messages updated, count:', updated.length);
-        return updated;
-      });
-    });
+      // Only add if it's not from current user (to avoid duplicates)
+      if (message.sender?.id !== user._id) {
+        setMessages(prev => {
+          // Check if message already exists
+          const exists = prev.some(m => m._id === message._id);
+          if (exists) return prev;
+          const updated = [...prev, message];
+          console.log('💬 Messages updated from socket, count:', updated.length);
+          return updated;
+        });
+      }
+    };
+    
+    socketService.onReceiveMessage(handleReceiveMessage);
 
-    // Listen for status updates
-    socket.on('volunteerStatusUpdated', (data) => {
-      console.log('📊 Status update received:', data);
-      if (data.eventId === eventId) {
+    // Listen for status updates from other volunteers
+    const handleStatusUpdate = (data) => {
+      console.log('📊 Status update received via socket:', data);
+      if (data.eventId === eventId && data.volunteerId !== user._id) {
+        // Only update if it's from another volunteer
         setEvent(prev => {
           if (!prev) return prev;
           
           let updatedEvent = { ...prev };
           
-          // Update individual volunteer's status if this is their update
+          // Update individual volunteer's status
           if (data.volunteerId && updatedEvent.volunteerAssignments) {
             updatedEvent.volunteerAssignments = updatedEvent.volunteerAssignments.map(assignment => {
-              if (assignment.volunteerId._id === data.volunteerId || assignment.volunteerId === data.volunteerId) {
+              const assignmentVolunteerId = assignment.volunteerId._id || assignment.volunteerId;
+              if (assignmentVolunteerId === data.volunteerId) {
                 return { ...assignment, status: data.newStatus };
               }
               return assignment;
@@ -179,7 +188,7 @@ const EventDetailPage = () => {
             }
           }
           
-          console.log('✅ Event state updated:', { 
+          console.log('✅ Event state updated from socket:', { 
             globalStatus: updatedEvent.trackingStatus,
             volunteerAssignments: updatedEvent.volunteerAssignments?.map(a => ({ 
               id: a.volunteerId._id || a.volunteerId, 
@@ -189,9 +198,11 @@ const EventDetailPage = () => {
           
           return updatedEvent;
         });
-        showToast({ type: 'success', message: `Status updated: ${data.newStatus}` });
+        showToast({ type: 'info', message: `${data.volunteerName}'s status: ${data.newStatus}` });
       }
-    });
+    };
+    
+    socket.on('volunteerStatusUpdated', handleStatusUpdate);
 
     // Listen for status update errors
     socket.on('statusUpdateError', (data) => {
@@ -200,14 +211,17 @@ const EventDetailPage = () => {
       setUpdatingStatus(false);
     });
 
+    console.log('✅ Socket listeners attached for eventId:', eventId);
+
     // Cleanup
     return () => {
+      console.log('🧹 Cleaning up socket listeners for eventId:', eventId);
       socket.emit('leaveEventChat');
       socket.emit('leaveEventRoom', { eventId });
-      socket.off('statusUpdated');
+      socket.off('volunteerStatusUpdated', handleStatusUpdate);
       socket.off('statusUpdateError');
     };
-  }, [event, user?._id, eventId]);
+  }, [user?._id, eventId]); // Removed 'event' from dependencies to prevent re-initialization
 
   const fetchEventDetails = async () => {
     try {
@@ -249,51 +263,55 @@ const EventDetailPage = () => {
   };
 
   const fetchFeedbacks = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/feedback/event/${eventId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setFeedbacks(data.feedbacks || []);
-      }
-    } catch (error) {
-      console.error('Error fetching feedbacks:', error);
-    }
+    // Feedbacks are now embedded in event volunteerAssignments.ratings
+    // No need for separate API call - ratings come with event data
+    console.log('Ratings are embedded in event data');
   };
 
   const handleSubmitFeedback = async (volunteerId) => {
     try {
+      // Validate feedback length
+      if (feedbackComment.length < 10) {
+        showToast({ type: 'error', message: 'Feedback must be at least 10 characters long' });
+        return;
+      }
+
       setSubmittingFeedback(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/feedback/event/${eventId}/volunteer/${volunteerId}`, {
+      const response = await fetch(`${API_BASE_URL}/events/${eventId}/rate-volunteer`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          volunteerId: volunteerId,
           rating: feedbackRating,
-          comment: feedbackComment
+          feedback: feedbackComment
         })
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to submit feedback');
+        throw new Error(error.message || 'Failed to submit rating');
       }
 
-      showToast({ type: 'success', message: 'Feedback submitted successfully!' });
+      const data = await response.json();
+      
+      showToast({ type: 'success', message: 'Thank you for your feedback.' });
       setShowFeedbackForm(null);
       setFeedbackRating(5);
       setFeedbackComment('');
-      fetchFeedbacks(); // Refresh feedbacks
+      
+      // Update event with new ratings
+      if (data.event) {
+        setEvent(data.event);
+      } else {
+        // Refresh event data
+        await fetchEventDetails();
+      }
     } catch (error) {
-      console.error('Error submitting feedback:', error);
+      console.error('Error submitting rating:', error);
       showToast({ type: 'error', message: error.message });
     } finally {
       setSubmittingFeedback(false);
@@ -302,6 +320,16 @@ const EventDetailPage = () => {
 
   const handleAcceptEvent = async () => {
     try {
+      // Check volunteer limit before accepting
+      if (event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded) {
+        showToast({ 
+          type: 'error', 
+          message: 'Volunteer limit reached. The required number of volunteers for this event is already full.' 
+        });
+        setShowParticipationModal(false);
+        return;
+      }
+
       setAcceptingEvent(true);
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/volunteer/event/${eventId}/accept`, {
@@ -402,9 +430,37 @@ const EventDetailPage = () => {
 
       const data = await response.json();
       console.log('✅ Status update response:', data);
-      setEvent(data.event);
+      console.log('   Updated event volunteerAssignments:', data.event.volunteerAssignments);
       
-      // Emit socket event for real-time update
+      // Immediately update local state for instant UI update with a fresh object reference
+      setEvent(prevEvent => {
+        const updatedEvent = {
+          ...data.event,
+          // Ensure volunteerAssignments is a new array with new object references
+          volunteerAssignments: data.event.volunteerAssignments?.map(assignment => ({
+            ...assignment,
+            volunteerId: typeof assignment.volunteerId === 'object' 
+              ? { ...assignment.volunteerId } 
+              : assignment.volunteerId
+          }))
+        };
+        console.log('✅ Event state updated immediately with new status');
+        console.log('   User ID:', user._id);
+        console.log('   All assignments:', updatedEvent.volunteerAssignments?.map(a => ({
+          volunteerId: a.volunteerId?._id || a.volunteerId,
+          status: a.status
+        })));
+        
+        const currentUserAssignment = updatedEvent.volunteerAssignments?.find(a => {
+          const volunteerIdStr = (a.volunteerId?._id || a.volunteerId)?.toString();
+          return volunteerIdStr === user._id.toString();
+        });
+        console.log('   New status for current user:', currentUserAssignment?.status);
+        
+        return updatedEvent;
+      });
+      
+      // Emit socket event for real-time update to other users
       const socket = socketService.getSocket();
       socket.emit('volunteerStatusUpdate', {
         eventId,
@@ -413,6 +469,7 @@ const EventDetailPage = () => {
         newStatus,
         fromStatus: currentVolunteerStatus
       });
+      console.log('✅ Socket event emitted for status update');
 
       showToast({ type: 'success', message: `Status updated to ${newStatus}!` });
     } catch (error) {
@@ -586,7 +643,24 @@ const EventDetailPage = () => {
       const savedMessage = await response.json();
       console.log('✅ Message saved to database:', savedMessage);
 
-      // Emit via socket for real-time delivery
+      // Immediately add message to local state for instant UI update
+      const newMessageObj = {
+        _id: savedMessage.data._id,
+        eventId,
+        message: messageData.message,
+        sender: {
+          id: user._id,
+          name: user.fullName,
+          role: user.role
+        },
+        timestamp: savedMessage.data.timestamp || new Date(),
+        image: imageUrl,
+        location: location
+      };
+      setMessages(prev => [...prev, newMessageObj]);
+      console.log('✅ Message added to local state immediately');
+
+      // Emit via socket for real-time delivery to other users
       console.log('📡 Emitting message via socket...');
       socketService.sendMessage(eventId, messageData.message, imageUrl, location);
       console.log('✅ Message emitted via socket');
@@ -615,9 +689,17 @@ const EventDetailPage = () => {
   const getVolunteerStatus = () => {
     if (!event?.volunteerAssignments || !user?._id) return null;
     
-    const assignment = event.volunteerAssignments.find(
-      a => a.volunteerId?._id === user._id || a.volunteerId === user._id
-    );
+    const userIdStr = user._id.toString();
+    const assignment = event.volunteerAssignments.find(a => {
+      const volunteerIdStr = (a.volunteerId?._id || a.volunteerId)?.toString();
+      return volunteerIdStr === userIdStr;
+    });
+    
+    console.log('🔍 getVolunteerStatus:', {
+      userIdStr,
+      foundAssignment: !!assignment,
+      status: assignment?.status
+    });
     
     return assignment?.status || null;
   };
@@ -778,10 +860,27 @@ const EventDetailPage = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Emergency Banner */}
+          {event.isEmergency && event.type === 'citizen' && (
+            <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-3 flex items-center gap-2">
+              <span className="text-2xl">🚨</span>
+              <div>
+                <p className="font-bold uppercase text-sm">EMERGENCY - Immediate Response Required</p>
+                <p className="text-red-100 text-xs">This citizen needs urgent assistance</p>
+              </div>
+            </div>
+          )}
+          
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
+          <div className={`p-6 text-white ${
+            event.isEmergency && event.type === 'citizen'
+              ? 'bg-gradient-to-r from-red-500 to-red-600'
+              : 'bg-gradient-to-r from-blue-600 to-indigo-600'
+          }`}>
             <h2 className="text-2xl font-bold mb-2">Event Participation Confirmation</h2>
-            <p className="text-blue-100">Please review the event details and confirm your participation</p>
+            <p className={event.isEmergency && event.type === 'citizen' ? 'text-red-100' : 'text-blue-100'}>
+              Please review the event details and confirm your participation
+            </p>
           </div>
 
           {/* Event Details */}
@@ -893,13 +992,33 @@ const EventDetailPage = () => {
               </button>
               <button
                 onClick={handleAcceptEvent}
-                disabled={acceptingEvent || decliningEvent}
-                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2"
+                disabled={
+                  acceptingEvent || 
+                  decliningEvent || 
+                  (event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded)
+                }
+                className={`flex-1 px-6 py-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 ${
+                  event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                }`}
+                title={
+                  event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded
+                    ? 'Volunteer limit reached'
+                    : ''
+                }
               >
                 {acceptingEvent ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     Joining...
+                  </>
+                ) : event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded ? (
+                  <>
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+                    </svg>
+                    Event Full
                   </>
                 ) : (
                   <>
@@ -961,10 +1080,26 @@ const EventDetailPage = () => {
             </div>
             <button
               onClick={handleAcceptEvent}
-              disabled={acceptingEvent}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md transition-all duration-200 whitespace-nowrap"
+              disabled={
+                acceptingEvent || 
+                (event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded)
+              }
+              className={`px-4 py-2 rounded-lg font-semibold shadow-sm hover:shadow-md transition-all duration-200 whitespace-nowrap ${
+                event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
+              }`}
+              title={
+                event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded
+                  ? 'Volunteer limit reached'
+                  : ''
+              }
             >
-              {acceptingEvent ? 'Accepting...' : 'Accept Event'}
+              {acceptingEvent 
+                ? 'Accepting...' 
+                : event?.volunteersNeeded > 0 && event?.assignedVolunteers?.length >= event?.volunteersNeeded
+                  ? 'Event Full'
+                  : 'Accept Event'}
             </button>
           </div>
         </div>
@@ -977,6 +1112,20 @@ const EventDetailPage = () => {
           <div className={`bg-white rounded-xl shadow-md border-l-4 ${
             event.type === 'citizen' ? 'border-teal-500' : 'border-purple-500'
           } p-8`}>
+            
+            {/* Emergency Banner */}
+            {event.isEmergency && event.type === 'citizen' && (
+              <div className="mb-6 -mx-8 -mt-8 bg-gradient-to-r from-red-600 to-red-700 text-white px-8 py-4 rounded-t-xl">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">🚨</span>
+                  <div>
+                    <h3 className="text-xl font-bold uppercase tracking-wide">Emergency Request</h3>
+                    <p className="text-red-100 text-sm">This citizen requires immediate assistance. Urgent action needed!</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="flex justify-between items-start mb-6">
               <div className="flex-1">
                 <h1 className="text-3xl font-bold text-gray-900 mb-3">
@@ -1111,10 +1260,26 @@ const EventDetailPage = () => {
                             </div>
                           )}
                           
-                          {/* Location Display with Map */}
+                          {/* Location Display with Link */}
                           {msg.location && msg.location.lat && msg.location.lng && (
-                            <div className="mt-2">
-                              <LocationMap location={msg.location} />
+                            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-center gap-2 text-blue-800">
+                                <span className="text-lg">📍</span>
+                                <div className="flex-1">
+                                  <div className="font-semibold text-sm">Location Shared</div>
+                                  {msg.location.address && (
+                                    <div className="text-xs text-blue-700 mt-1">{msg.location.address}</div>
+                                  )}
+                                  <a
+                                    href={`https://www.google.com/maps?q=${msg.location.lat},${msg.location.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:text-blue-800 underline mt-1 inline-block"
+                                  >
+                                    View on Google Maps →
+                                  </a>
+                                </div>
+                              </div>
                             </div>
                           )}
                           
@@ -1240,58 +1405,71 @@ const EventDetailPage = () => {
 
         {/* Right Column - Status & Info */}
         <div className="space-y-6">
+          {/* Global Event Status Tracker - For Organizers/Citizens */}
+          {(user?.role === 'organizer' || user?.role === 'citizen' || user?.role === 'admin') && (
+            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-6">Event Status Tracker</h3>
+              
+              {/* Status Steps */}
+              <div className="flex items-center justify-between">
+                {['Pending', 'Assigned', 'In Progress', 'Completed'].map((status, index) => {
+                  const statuses = ['Pending', 'Assigned', 'In Progress', 'Completed'];
+                  const currentIndex = statuses.indexOf(event.trackingStatus || 'Pending');
+                  const isActive = index === currentIndex;
+                  const isCompleted = index < currentIndex;
+                  const isPending = index > currentIndex;
+
+                  const icons = { 'Pending': '⏳', 'Assigned': '✓', 'In Progress': '⚡', 'Completed': '✓' };
+                  const colors = {
+                    'Pending': { bg: 'bg-orange-500', light: 'bg-orange-100', text: 'text-orange-600' },
+                    'Assigned': { bg: 'bg-blue-500', light: 'bg-blue-100', text: 'text-blue-600' },
+                    'In Progress': { bg: 'bg-indigo-500', light: 'bg-indigo-100', text: 'text-indigo-600' },
+                    'Completed': { bg: 'bg-green-500', light: 'bg-green-100', text: 'text-green-600' }
+                  };
+
+                  return (
+                    <React.Fragment key={status}>
+                      <div className="flex flex-col items-center">
+                        <div
+                          className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white mb-2 ${
+                            isActive || isCompleted ? colors[status].bg : 'bg-gray-300'
+                          }`}
+                        >
+                          <span className="text-xl">{icons[status]}</span>
+                        </div>
+                        <span className={`text-xs font-semibold text-center ${
+                          isActive ? colors[status].text : isPending ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                          {status}
+                        </span>
+                      </div>
+                      {index < 3 && (
+                        <div className={`flex-1 h-1 mx-2 rounded ${
+                          isCompleted ? colors[statuses[index + 1]].bg : 'bg-gray-300'
+                        }`} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Status Tracker - For Volunteers (Own Tracker Only) */}
           {user?.role === 'volunteer' && getVolunteerParticipationStatus() === 'Accepted' && (() => {
-            const volunteerAssignment = event.volunteerAssignments?.find(
-              va => va.volunteerId?._id === user._id || va.volunteerId === user._id
-            );
-            const volunteerStatus = volunteerAssignment?.status || 'Assigned';
+            // Use helper function to get current volunteer status
+            const volunteerStatus = getVolunteerStatus() || 'Assigned';
+            
+            console.log('🔄 Rendering StatusTracker with status:', volunteerStatus);
             
             return (
-              <div ref={statusTrackerRef}>
+              <div ref={statusTrackerRef} key={`status-tracker-${volunteerStatus}`}>
                 <StatusTracker 
                   volunteerId={user._id}
                   volunteerName={user.fullName}
                   volunteerStatus={volunteerStatus}
                   isReadOnly={false}
                 />
-              </div>
-            );
-          })()}
-
-          {/* Status Trackers - For Organizers/Citizens (All Volunteers - Read Only) */}
-          {(user?.role === 'organizer' || user?.role === 'citizen' || user?.role === 'admin') && event.assignedVolunteers?.length > 0 && (() => {
-            // Filter for volunteers who have accepted
-            const acceptedVolunteers = event.assignedVolunteers.filter(volunteer => {
-              const volunteerAssignment = event.volunteerAssignments?.find(
-                va => va.volunteerId?._id === volunteer._id || va.volunteerId === volunteer._id
-              );
-              return volunteerAssignment?.participationStatus === 'Accepted';
-            });
-
-            if (acceptedVolunteers.length === 0) {
-              return null;
-            }
-
-            return (
-              <div className="space-y-4">
-                <h3 className="text-lg font-bold text-gray-800">Volunteer Status Trackers</h3>
-                {acceptedVolunteers.map((volunteer) => {
-                  const volunteerAssignment = event.volunteerAssignments?.find(
-                    va => va.volunteerId?._id === volunteer._id || va.volunteerId === volunteer._id
-                  );
-                  const volunteerStatus = volunteerAssignment?.status || 'Assigned';
-                  
-                  return (
-                    <StatusTracker 
-                      key={volunteer._id}
-                      volunteerId={volunteer._id}
-                      volunteerName={volunteer.fullName}
-                      volunteerStatus={volunteerStatus}
-                      isReadOnly={true}
-                    />
-                  );
-                })}
               </div>
             );
           })()}
@@ -1375,8 +1553,8 @@ const EventDetailPage = () => {
 
           {/* Feedback Section - Show for volunteers who completed their tasks */}
           {(user?.role === 'organizer' || user?.role === 'citizen' || user?.role === 'user') && event.assignedVolunteers?.length > 0 && (
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Volunteer Feedback & Ratings</h3>
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Volunteer Feedback & Ratings</h3>
               
               <div className="space-y-4">
                 {event.assignedVolunteers.map((volunteer) => {
@@ -1390,131 +1568,95 @@ const EventDetailPage = () => {
                   if (volunteerStatus !== 'Completed') {
                     return null;
                   }
+
+                  // Get ratings from volunteerAssignment
+                  const ratings = volunteerAssignment?.ratings || [];
+                  const averageRating = ratings.length > 0 
+                    ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
+                    : 0;
                   
-                  const existingFeedback = feedbacks.find(
-                    f => f.volunteerId._id === volunteer._id && f.ratedBy._id === user._id
+                  // Check if current user already rated this volunteer
+                  const existingRating = ratings.find(
+                    r => r.ratedBy?._id === user._id || r.ratedBy === user._id
                   );
                   const isFormVisible = showFeedbackForm === volunteer._id;
 
                   return (
-                    <div key={volunteer._id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="font-semibold text-gray-900">{volunteer.fullName}</p>
-                          <p className="text-sm text-gray-600">{volunteer.email}</p>
-                          <span className="inline-flex items-center px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-semibold mt-1">
-                            <span>✓</span> Completed
-                          </span>
+                    <div key={volunteer._id} className="rounded-2xl p-5 shadow-lg bg-white border border-gray-200">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1">
+                          <p className="font-bold text-gray-900 text-xl">{volunteer.fullName}</p>
+                          <p className="text-sm text-gray-500 mt-1">{volunteer.email}</p>
+                          <div className="flex items-center gap-3 mt-3">
+                            <span className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-700 rounded-xl text-xs font-semibold shadow-sm">
+                              <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              Completed
+                            </span>
+                            {ratings.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                  <svg className="w-6 h-6 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                  </svg>
+                                  <span className="ml-0.5 font-bold text-gray-900 text-xl">{averageRating}</span>
+                                  <span className="text-gray-500 text-sm ml-0.5">/ 5</span>
+                                </div>
+                                <span className="text-xs text-gray-600">({ratings.length} review{ratings.length !== 1 ? 's' : ''})</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {!existingFeedback && !isFormVisible && (
+                        {!existingRating && !isFormVisible && (
                           <button
                             onClick={() => {
                               setShowFeedbackForm(volunteer._id);
                               setFeedbackRating(5);
                               setFeedbackComment('');
                             }}
-                            className="px-3 py-1 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-700"
+                            className="px-4 py-2 bg-white text-gray-700 border-2 border-gray-300 rounded-xl text-sm font-semibold hover:border-blue-500 hover:text-blue-600 shadow-md hover:shadow-lg transition-all duration-200"
                           >
-                            Rate Volunteer
+                            ⭐ Rate Volunteer
                           </button>
                         )}
                       </div>
 
-                        {existingFeedback && (
-                          <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
-                            <div className="flex items-center gap-1 mb-1">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <svg
-                                  key={star}
-                                  className={`w-5 h-5 ${star <= existingFeedback.rating ? 'text-yellow-400' : 'text-gray-300'}`}
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                >
-                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                              ))}
-                            </div>
-                            {existingFeedback.comment && (
-                              <p className="text-sm text-gray-700 mt-2">{existingFeedback.comment}</p>
-                            )}
-                            <p className="text-xs text-green-700 mt-2">✓ Feedback submitted</p>
-                          </div>
-                        )}
-
-                        {isFormVisible && !existingFeedback && (
-                          <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                            <div className="mb-3">
-                              <label className="block text-sm font-semibold text-gray-700 mb-2">Rating</label>
-                              <div className="flex items-center gap-2">
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <button
-                                    key={star}
-                                    type="button"
-                                    onClick={() => setFeedbackRating(star)}
-                                    className="focus:outline-none"
-                                  >
+                      {/* Show recent feedback preview */}
+                      {ratings.length > 0 && !isFormVisible && (
+                        <div className="mt-4 space-y-3">
+                          <h4 className="text-sm font-semibold text-gray-800">Recent Feedback:</h4>
+                          {ratings.slice(-2).reverse().map((rating, idx) => (
+                            <div key={idx} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="flex items-center gap-0.5">
+                                  {[1, 2, 3, 4, 5].map((star) => (
                                     <svg
-                                      className={`w-8 h-8 ${star <= feedbackRating ? 'text-yellow-400' : 'text-gray-300'} hover:text-yellow-300 transition-colors`}
+                                      key={star}
+                                      className={`w-5 h-5 ${star <= rating.rating ? 'text-yellow-400' : 'text-gray-300'}`}
                                       fill="currentColor"
                                       viewBox="0 0 20 20"
                                     >
                                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                     </svg>
-                                  </button>
-                                ))}
+                                  ))}
+                                </div>
+                                <span className="text-xs text-gray-500 capitalize font-medium">by {rating.role}</span>
                               </div>
+                              <p className="text-sm text-gray-700 leading-relaxed">{rating.feedback}</p>
                             </div>
-                            <div className="mb-3">
-                              <label className="block text-sm font-semibold text-gray-700 mb-2">Comment (Optional)</label>
-                              <textarea
-                                value={feedbackComment}
-                                onChange={(e) => setFeedbackComment(e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg p-2 text-sm"
-                                rows="3"
-                                placeholder="Share your experience working with this volunteer..."
-                              />
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleSubmitFeedback(volunteer._id)}
-                                disabled={submittingFeedback}
-                                className="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700 disabled:opacity-50"
-                              >
-                                {submittingFeedback ? 'Submitting...' : 'Submit Feedback'}
-                              </button>
-                              <button
-                                onClick={() => setShowFeedbackForm(null)}
-                                disabled={submittingFeedback}
-                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded font-semibold hover:bg-gray-50"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }).filter(Boolean)}
-                </div>
+                          ))}
+                        </div>
+                      )}
 
-              {/* Show feedbacks for volunteers to view their own */}
-              {user?.role === 'volunteer' && (
-                <div className="space-y-3 mt-6">
-                  <h4 className="text-md font-semibold text-gray-700 mb-3">Your Feedback</h4>
-                  {feedbacks.filter(f => f.volunteerId._id === user._id).length === 0 ? (
-                    <div className="text-center py-6">
-                      <p className="text-gray-500 text-sm">No feedback received yet</p>
-                    </div>
-                  ) : (
-                    feedbacks
-                      .filter(f => f.volunteerId._id === user._id)
-                      .map((feedback) => (
-                        <div key={feedback._id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center gap-1 mb-2">
+                      {existingRating && !isFormVisible && (
+                        <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-5 shadow-sm">
+                          <p className="text-sm font-semibold text-green-800 mb-3">✓ You have already rated this volunteer for this event</p>
+                          <div className="flex items-center gap-1 mb-3">
                             {[1, 2, 3, 4, 5].map((star) => (
                               <svg
                                 key={star}
-                                className={`w-5 h-5 ${star <= feedback.rating ? 'text-yellow-400' : 'text-gray-300'}`}
+                                className={`w-6 h-6 ${star <= existingRating.rating ? 'text-yellow-400' : 'text-gray-300'}`}
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                               >
@@ -1522,15 +1664,155 @@ const EventDetailPage = () => {
                               </svg>
                             ))}
                           </div>
-                          {feedback.comment && (
-                            <p className="text-sm text-gray-700 mb-2">{feedback.comment}</p>
-                          )}
-                          <p className="text-xs text-gray-500">
-                            From {feedback.ratedBy.fullName} ({feedback.ratedByRole})
-                          </p>
+                          <p className="text-sm text-gray-800 leading-relaxed">{existingRating.feedback}</p>
                         </div>
-                      ))
-                  )}
+                      )}
+
+                      {isFormVisible && !existingRating && (
+                        <div className="mt-4 bg-gray-50 border border-gray-300 rounded-xl p-5 shadow-lg">
+                          <h4 className="font-bold text-gray-900 mb-4 text-lg">⭐ Rate {volunteer.fullName}</h4>
+                          <div className="mb-4">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Star Rating *</label>
+                            <div className="flex items-center gap-2">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={() => setFeedbackRating(star)}
+                                  className="focus:outline-none transform hover:scale-125 transition-all duration-200"
+                                >
+                                  <svg
+                                    className={`w-10 h-10 ${star <= feedbackRating ? 'text-yellow-400 drop-shadow-lg' : 'text-gray-300'} hover:text-yellow-300 transition-colors cursor-pointer`}
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                  >
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                  </svg>
+                                </button>
+                              ))}
+                              <span className="ml-2 text-lg font-bold text-gray-900">{feedbackRating}/5</span>
+                            </div>
+                          </div>
+                          <div className="mb-4">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              Feedback * <span className="text-xs text-gray-500">(minimum 10 characters)</span>
+                            </label>
+                            <textarea
+                              value={feedbackComment}
+                              onChange={(e) => setFeedbackComment(e.target.value)}
+                              className="w-full border-2 border-gray-300 rounded-lg p-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all bg-white"
+                              rows="4"
+                              placeholder="Share your experience working with this volunteer... (minimum 10 characters)"
+                            />
+                            <p className={`text-xs mt-1 font-semibold ${feedbackComment.length >= 10 ? 'text-green-600' : 'text-orange-600'}`}>
+                              {feedbackComment.length} / 10 characters {feedbackComment.length >= 10 ? '✓' : ''}
+                            </p>
+                          </div>
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => handleSubmitFeedback(volunteer._id)}
+                              disabled={submittingFeedback || feedbackComment.length < 10}
+                              className="flex-1 px-5 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all duration-200"
+                            >
+                              {submittingFeedback ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                  Submitting...
+                                </span>
+                              ) : (
+                                'Submit Rating'
+                              )}
+                            </button>
+                            <button
+                              onClick={() => setShowFeedbackForm(null)}
+                              disabled={submittingFeedback}
+                              className="px-5 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 disabled:opacity-50 transition-all duration-200"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }).filter(Boolean)}
+                
+                {event.assignedVolunteers.filter(v => {
+                  const va = event.volunteerAssignments?.find(
+                    a => a.volunteerId?._id === v._id || a.volunteerId === v._id
+                  );
+                  return va?.status === 'Completed';
+                }).length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500 text-sm">No completed volunteers to rate yet</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Show feedbacks for volunteers to view their own */}
+              {user?.role === 'volunteer' && (
+                <div className="space-y-3 mt-6 pt-6 border-t border-gray-200">
+                  <h4 className="text-md font-semibold text-gray-700 mb-3">Your Feedback from This Event</h4>
+                  {(() => {
+                    const myAssignment = event.volunteerAssignments?.find(
+                      va => va.volunteerId?._id === user._id || va.volunteerId === user._id
+                    );
+                    const myRatings = myAssignment?.ratings || [];
+                    
+                    if (myRatings.length === 0) {
+                      return (
+                        <div className="text-center py-6 bg-gray-50 rounded-lg">
+                          <p className="text-gray-500 text-sm">No feedback received yet for this event</p>
+                        </div>
+                      );
+                    }
+                    
+                    const averageRating = (myRatings.reduce((sum, r) => sum + r.rating, 0) / myRatings.length).toFixed(1);
+                    
+                    return (
+                      <>
+                        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center">
+                              <svg className="w-8 h-8 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                              </svg>
+                              <span className="ml-2 text-3xl font-bold text-gray-900">{averageRating}</span>
+                              <span className="text-gray-600 ml-1">/ 5</span>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">Event Rating</p>
+                              <p className="text-sm text-gray-600">Based on {myRatings.length} review{myRatings.length !== 1 ? 's' : ''}</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {myRatings.map((rating, idx) => (
+                          <div key={idx} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="flex items-center">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <svg
+                                    key={star}
+                                    className={`w-5 h-5 ${star <= rating.rating ? 'text-yellow-400' : 'text-gray-300'}`}
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                  >
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                  </svg>
+                                ))}
+                              </div>
+                              <span className="text-sm font-semibold text-gray-700 capitalize">From {rating.role}</span>
+                              <span className="text-xs text-gray-500">
+                                · {new Date(rating.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-700 leading-relaxed">{rating.feedback}</p>
+                          </div>
+                        ))}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>

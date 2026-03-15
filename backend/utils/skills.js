@@ -1,129 +1,143 @@
-// Exact predefined skill list for the UnityAid platform
-export const SKILL_LIST = [
-    'General Support',
+// Skills List - Backend Version
+export const SKILL_CATEGORIES = {
+  GENERAL: 'General Support',
+  MEDICAL: 'Medical & Health',
+  EMERGENCY: 'Emergency & Rescue',
+  LOGISTICS: 'Logistics & Support',
+  EDUCATION: 'Education & Training',
+  CARE: 'Care Services',
+  EVENT: 'Event & Community',
+  COMMUNICATION: 'Communication',
+  PROFESSIONAL: 'Professional Services'
+};
+
+export const SKILLS = {
+  [SKILL_CATEGORIES.GENERAL]: [
+    'General Support'
+  ],
+  [SKILL_CATEGORIES.MEDICAL]: [
     'First Aid',
     'Medical Assistance',
-    'Food Distribution',
-    'Logistics & Transport',
-    'Crowd Management',
-    'Teaching & Tutoring',
+    'Nursing',
+    'CPR Certification',
+    'Health Education'
+  ],
+  [SKILL_CATEGORIES.EMERGENCY]: [
     'Disaster Relief',
-    'Counseling Support',
+    'Emergency Response',
+    'Crisis Management',
+    'Search & Rescue',
+    'Safety Management'
+  ],
+  [SKILL_CATEGORIES.LOGISTICS]: [
+    'Logistics & Transport',
+    'Inventory Management',
+    'Food Distribution',
+    'Supply Chain',
+    'Warehouse Management'
+  ],
+  [SKILL_CATEGORIES.EDUCATION]: [
+    'Teaching & Tutoring',
+    'Curriculum Development',
+    'Student Mentoring',
+    'Training & Development',
+    'Technical Training'
+  ],
+  [SKILL_CATEGORIES.CARE]: [
+    'Childcare',
+    'Elder Care',
+    'Disability Support',
+    'Mental Health Support',
+    'Counseling Support'
+  ],
+  [SKILL_CATEGORIES.EVENT]: [
+    'Event Planning',
+    'Community Organizing',
+    'Marketing & Outreach',
+    'Public Relations',
+    'Crowd Management'
+  ],
+  [SKILL_CATEGORIES.COMMUNICATION]: [
+    'Translation',
+    'Public Speaking',
+    'Communication Skills',
+    'Social Media Management',
+    'Content Writing'
+  ],
+  [SKILL_CATEGORIES.PROFESSIONAL]: [
     'Technical Support',
-    'Translation'
-];
+    'IT Support',
+    'Legal Services',
+    'Financial Services',
+    'Project Management'
+  ]
+};
 
-// Legacy lists for backward compatibility
+// Get all skills as flat array
+export const SKILL_LIST = Object.values(SKILLS).flat();
+
+// Export as VOLUNTEER_SKILLS for backward compatibility
 export const VOLUNTEER_SKILLS = SKILL_LIST;
 
-export const ORGANIZER_SKILLS = [
-    'Community Outreach',
-    'Event Management',
-    'Budget Planning',
-    'Volunteer Coordination',
-    'Partnership Building',
-    'Digital Marketing',
-    'Public Speaking',
-    'Documentation & Reporting',
-    'Grant Writing',
-    'Safety Protocols',
-    'Leadership',
-    'Project Management',
-    'Training & Development',
-    'Strategic Planning'
-];
-
-// Get skill category
-export const getSkillCategory = (skill) => {
-    const categories = {
-        'Medical': ['First Aid', 'Medical Assistance', 'Counseling Support'],
-        'Emergency': ['Crowd Management', 'Disaster Relief'],
-        'Logistics': ['Food Distribution', 'Logistics & Transport'],
-        'Education': ['Teaching & Tutoring', 'Technical Support'],
-        'General': ['General Support'],
-        'Communication': ['Translation']
-    };
-
-    for (const [category, skills] of Object.entries(categories)) {
-        if (skills.includes(skill)) {
-            return category;
-        }
-    }
-    return 'Other';
+// Skill Levels
+export const SKILL_LEVELS = {
+  BEGINNER: 'beginner',
+  INTERMEDIATE: 'intermediate',
+  ADVANCED: 'advanced',
+  EXPERT: 'expert'
 };
 
-// Validate skill against allowed skills
-export const isValidSkill = (skill, roleType = 'volunteer') => {
-    if (roleType === 'volunteer') {
-        return SKILL_LIST.includes(skill);
-    } else if (roleType === 'organizer') {
-        return SKILL_LIST.includes(skill);
-    }
+/**
+ * Validate if provided skills are valid
+ * @param {Array<string>} skills - Array of skill names to validate
+ * @param {string} type - Type of validation ('volunteer', 'request', etc.)
+ * @returns {boolean} - True if all skills are valid, false otherwise
+ */
+export function validateSkills(skills, type = 'volunteer') {
+  if (!Array.isArray(skills)) {
     return false;
-};
+  }
 
-// Validate skills array
-export const validateSkills = (skills, roleType = 'volunteer') => {
-    if (!Array.isArray(skills)) {
-        return false;
+  // Empty array is valid
+  if (skills.length === 0) {
+    return true;
+  }
+
+  // Check if all skills are in the valid skills list
+  const validSkillsSet = new Set(VOLUNTEER_SKILLS);
+  
+  return skills.every(skill => {
+    // Check if skill is a string
+    if (typeof skill !== 'string') {
+      return false;
     }
-    return skills.every(skill => isValidSkill(skill, roleType));
-};
+    
+    // Check if skill exists in valid skills list
+    return validSkillsSet.has(skill);
+  });
+}
 
-// Get skill match percentage between volunteer and event
-export const getSkillMatchPercentage = (volunteerSkills, eventRequiredSkills) => {
-    if (!Array.isArray(volunteerSkills) || !Array.isArray(eventRequiredSkills)) {
-        return 0;
-    }
+/**
+ * Get all available skill categories
+ * @returns {Object} - Object containing all skill categories
+ */
+export function getSkillCategories() {
+  return SKILL_CATEGORIES;
+}
 
-    if (eventRequiredSkills.includes('General Support')) {
-        return 100; // Matches all events marked as General Support
-    }
+/**
+ * Get skills by category
+ * @param {string} category - Category name
+ * @returns {Array<string>} - Array of skills in the category
+ */
+export function getSkillsByCategory(category) {
+  return SKILLS[category] || [];
+}
 
-    const matches = volunteerSkills.filter(skill =>
-        eventRequiredSkills.includes(skill)
-    );
-
-    return eventRequiredSkills.length > 0
-        ? Math.round((matches.length / eventRequiredSkills.length) * 100)
-        : 0;
-};
-
-// Get matched skills between volunteer and event
-export const getMatchedSkills = (volunteerSkills, eventRequiredSkills) => {
-    if (!Array.isArray(volunteerSkills) || !Array.isArray(eventRequiredSkills)) {
-        return [];
-    }
-
-    return volunteerSkills.filter(skill =>
-        eventRequiredSkills.includes(skill)
-    );
-};
-
-// Check if volunteer has any matching skills with event
-export const hasSkillMatch = (volunteerSkills, eventRequiredSkills) => {
-    if (!Array.isArray(volunteerSkills) || !Array.isArray(eventRequiredSkills)) {
-        return false;
-    }
-
-    // If event is open to all (General Support), volunteer matches
-    if (eventRequiredSkills.includes('General Support')) {
-        return true;
-    }
-
-    // Check if any volunteer skill matches event requirements
-    return volunteerSkills.some(skill =>
-        eventRequiredSkills.includes(skill)
-    );
-};
-
-export default {
-    VOLUNTEER_SKILLS,
-    ORGANIZER_SKILLS,
-    getSkillCategory,
-    isValidSkill,
-    validateSkills,
-    getSkillMatchPercentage,
-    getMatchedSkills,
-    hasSkillMatch
-};
+/**
+ * Get all skills grouped by category
+ * @returns {Object} - Object with categories as keys and skill arrays as values
+ */
+export function getAllSkillsGrouped() {
+  return SKILLS;
+}

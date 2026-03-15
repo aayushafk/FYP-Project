@@ -10,6 +10,7 @@ const LocationMap = ({ location }) => {
   return (
     <div className="rounded-lg overflow-hidden border border-gray-300 my-2">
       <MapContainer
+        key={`map-${location.lat}-${location.lng}`}
         center={[location.lat, location.lng]}
         zoom={13}
         style={{ height: '200px', width: '100%' }}

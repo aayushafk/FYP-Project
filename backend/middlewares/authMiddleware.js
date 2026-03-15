@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import { JWT_SECRET } from '../config/env.js'
 
 export const authMiddleware = async (req, res, next) => {
   try {
@@ -13,7 +14,7 @@ export const authMiddleware = async (req, res, next) => {
     const token = authHeader.substring(7) // Remove 'Bearer ' prefix
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production')
+    const decoded = jwt.verify(token, JWT_SECRET)
     
     // Get user from token
     const user = await User.findById(decoded.userId).select('-password')

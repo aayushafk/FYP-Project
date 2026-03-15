@@ -142,10 +142,31 @@ const EventsList = ({ userRole }) => {
             <div
               key={event._id}
               onClick={() => navigate(`/event/${event._id}`)}
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+              className={`bg-white rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer overflow-hidden ${
+                event.isEmergency && event.type === 'citizen'
+                  ? 'border-2 border-red-500 shadow-red-200 animate-pulse-slow'
+                  : ''
+              }`}
+              style={{
+                animation: event.isEmergency && event.type === 'citizen' 
+                  ? 'pulse-glow 2s ease-in-out infinite' 
+                  : 'none'
+              }}
             >
+              {/* Emergency Badge */}
+              {event.isEmergency && event.type === 'citizen' && (
+                <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 flex items-center gap-2">
+                  <span className="text-xl">🚨</span>
+                  <span className="font-bold text-sm uppercase tracking-wide">EMERGENCY REQUEST</span>
+                </div>
+              )}
+              
               {/* Header with Type Badge */}
-              <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-100">
+              <div className={`p-4 ${
+                event.isEmergency && event.type === 'citizen'
+                  ? 'bg-gradient-to-r from-red-50 to-red-100'
+                  : 'bg-gradient-to-r from-blue-50 to-blue-100'
+              }`}>
                 <div className="flex justify-between items-start mb-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getTypeColor(event.type)}`}>
                     {event.type === 'citizen' ? 'Help Request' : 'Organizer Event'}
@@ -222,9 +243,19 @@ const EventsList = ({ userRole }) => {
               </div>
 
               {/* Footer Action */}
-              <div className="px-4 py-3 bg-gray-50 flex justify-end">
-                <button className="text-blue-600 hover:text-blue-800 font-semibold text-sm">
-                  View Details →
+              <div className={`px-4 py-3 flex justify-end ${
+                event.isEmergency && event.type === 'citizen' 
+                  ? 'bg-red-50' 
+                  : 'bg-gray-50'
+              }`}>
+                <button className={`font-semibold text-sm ${
+                  event.isEmergency && event.type === 'citizen'
+                    ? 'text-red-600 hover:text-red-800'
+                    : 'text-blue-600 hover:text-blue-800'
+                }`}>
+                  {event.isEmergency && event.type === 'citizen' 
+                    ? '🚨 Respond Immediately →' 
+                    : 'View Details →'}
                 </button>
               </div>
             </div>

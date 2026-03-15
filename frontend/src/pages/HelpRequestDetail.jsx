@@ -17,6 +17,10 @@ const HelpRequestDetail = () => {
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [showFeedbackForm, setShowFeedbackForm] = useState(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const statusTrackerRef = useRef(null);
 
   useEffect(() => {
@@ -261,6 +265,52 @@ const HelpRequestDetail = () => {
     }
   };
 
+  const handleSubmitFeedback = async (volunteerId) => {
+    if (feedbackRating < 1 || feedbackRating > 5) {
+      showToast({ type: 'error', message: 'Rating must be between 1 and 5 stars' });
+      return;
+    }
+    if (feedbackComment.length < 10) {
+      showToast({ type: 'error', message: 'Feedback must be at least 10 characters' });
+      return;
+    }
+
+    try {
+      setSubmittingFeedback(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/events/${id}/rate-volunteer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          volunteerId,
+          rating: feedbackRating,
+          feedback: feedbackComment
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to submit rating');
+      }
+
+      showToast({ type: 'success', message: 'Rating submitted successfully!' });
+      setShowFeedbackForm(null);
+      setFeedbackRating(5);
+      setFeedbackComment('');
+      
+      // Refresh request details
+      await fetchRequestDetails();
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      showToast({ type: 'error', message: error.message });
+    } finally {
+      setSubmittingFeedback(false);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Pending':
@@ -368,14 +418,31 @@ const HelpRequestDetail = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Details */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Emergency Banner */}
+            {request.isEmergency && (
+              <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-5 text-white">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">🚨</span>
+                  <div>
+                    <h3 className="text-xl font-bold uppercase tracking-wide">Emergency Request</h3>
+                    <p className="text-red-100 text-sm">This citizen requires immediate assistance. Urgent action needed!</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Header Card */}
-            <div className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
+            <div className={`rounded-xl shadow-lg p-6 text-white ${
+              request.isEmergency
+                ? 'bg-gradient-to-r from-red-500 to-red-600'
+                : 'bg-gradient-to-r from-amber-500 to-orange-600'
+            }`}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                   <h1 className="text-3xl font-bold mb-2">{request.title}</h1>
                   <div className="flex items-center gap-3 text-amber-100">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-white/20 backdrop-blur-sm">
-                      🆘 Help Request
+                      {request.isEmergency ? '🚨 EMERGENCY' : '🆘 Help Request'}
                     </span>
                     <span className={`px-3 py-1 rounded-lg text-xs font-semibold border ${getStatusColor(request.trackingStatus || request.status)}`}>
                       {request.trackingStatus || request.status || 'Pending'}
@@ -647,49 +714,155 @@ const HelpRequestDetail = () => {
                   <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
                     Volunteers ({request.volunteerAssignments.length})
                   </p>
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {request.volunteerAssignments.map((assignment, index) => {
                       const volunteer = assignment.volunteerId;
                       const isAccepted = assignment.participationStatus === 'Accepted';
+                      const isCompleted = assignment.status === 'Completed';
+                      const isFormVisible = showFeedbackForm === volunteer?._id;
+                      const existingRating = assignment.ratings?.find(r => r.ratedBy?.toString() === user?._id?.toString());
+                      const allRatings = assignment.ratings || [];
+                      const avgRating = allRatings.length > 0 
+                        ? (allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length).toFixed(1)
+                        : null;
                       
                       return (
                         <div 
                           key={index} 
-                          className={`flex items-center justify-between p-3 rounded-lg border-2 ${
+                          className={`p-4 rounded-lg border-2 ${
                             isAccepted 
                               ? 'bg-green-50 border-green-200' 
                               : 'bg-gray-50 border-gray-200'
                           }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-white ${
-                              isAccepted ? 'bg-green-500' : 'bg-gray-400'
-                            }`}>
-                              {volunteer?.fullName?.[0] || 'V'}
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-800">
-                                {volunteer?.fullName || 'Volunteer'}
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className={`text-xs px-2 py-1 rounded font-medium ${
-                                  isAccepted 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-gray-200 text-gray-600'
-                                }`}>
-                                  {assignment.participationStatus}
-                                </span>
-                                {isAccepted && (
-                                  <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-800">
-                                    {assignment.status}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-white ${
+                                isAccepted ? 'bg-green-500' : 'bg-gray-400'
+                              }`}>
+                                {volunteer?.fullName?.[0] || 'V'}
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-800">
+                                  {volunteer?.fullName || 'Volunteer'}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className={`text-xs px-2 py-1 rounded font-medium ${
+                                    isAccepted 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : 'bg-gray-200 text-gray-600'
+                                  }`}>
+                                    {assignment.participationStatus}
                                   </span>
+                                  {isAccepted && (
+                                    <span className={`text-xs px-2 py-1 rounded font-medium ${
+                                      isCompleted ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                                    }`}>
+                                      {assignment.status}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Show average rating */}
+                                {avgRating && (
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <span className="text-yellow-400 text-sm">⭐</span>
+                                    <span className="text-xs font-medium text-gray-700">{avgRating}</span>
+                                    <span className="text-xs text-gray-500">({allRatings.length} review{allRatings.length !== 1 ? 's' : ''})</span>
+                                  </div>
                                 )}
                               </div>
                             </div>
+                            <div className="text-2xl">
+                              {isAccepted ? '✓' : '✗'}
+                            </div>
                           </div>
-                          <div className="text-2xl">
-                            {isAccepted ? '✓' : '✗'}
-                          </div>
+
+                          {/* Rating Section - Only for Citizens and Completed Status */}
+                          {user?.role === 'citizen' && isCompleted && (
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                              {!existingRating && !isFormVisible && (
+                                <button
+                                  onClick={() => {
+                                    setShowFeedbackForm(volunteer._id);
+                                    setFeedbackRating(5);
+                                    setFeedbackComment('');
+                                  }}
+                                  className="w-full px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-semibold hover:from-blue-700 hover:to-blue-800 shadow-md transition-all"
+                                >
+                                  ⭐ Rate Volunteer
+                                </button>
+                              )}
+
+                              {existingRating && !isFormVisible && (
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                                  <p className="text-xs font-semibold text-green-800 mb-2">✓ You rated this volunteer</p>
+                                  <div className="flex items-center gap-1 mb-1">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <span key={star} className={`text-lg ${star <= existingRating.rating ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                        ⭐
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-gray-700 mt-2">{existingRating.feedback}</p>
+                                </div>
+                              )}
+
+                              {isFormVisible && !existingRating && (
+                                <div className="bg-gradient-to-br from-white via-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg p-4 shadow-lg">
+                                  <h4 className="font-bold text-purple-900 mb-3 text-sm">⭐ Rate {volunteer?.fullName}</h4>
+                                  <div className="mb-3">
+                                    <label className="block text-xs font-semibold text-purple-800 mb-2">Star Rating *</label>
+                                    <div className="flex items-center gap-2">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <button
+                                          key={star}
+                                          type="button"
+                                          onClick={() => setFeedbackRating(star)}
+                                          className="focus:outline-none transform hover:scale-125 transition-all"
+                                        >
+                                          <span className={`text-2xl ${star <= feedbackRating ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                            ⭐
+                                          </span>
+                                        </button>
+                                      ))}
+                                      <span className="ml-2 text-sm font-bold text-purple-900">{feedbackRating}/5</span>
+                                    </div>
+                                  </div>
+                                  <div className="mb-3">
+                                    <label className="block text-xs font-semibold text-purple-800 mb-2">
+                                      Feedback * <span className="text-xs text-purple-600">(minimum 10 characters)</span>
+                                    </label>
+                                    <textarea
+                                      value={feedbackComment}
+                                      onChange={(e) => setFeedbackComment(e.target.value)}
+                                      className="w-full border-2 border-purple-300 rounded-lg p-2 text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all bg-white"
+                                      rows="3"
+                                      placeholder="Share your experience..."
+                                    />
+                                    <p className={`text-xs mt-1 font-semibold ${feedbackComment.length >= 10 ? 'text-green-600' : 'text-orange-600'}`}>
+                                      {feedbackComment.length} / 10 characters {feedbackComment.length >= 10 ? '✓' : ''}
+                                    </p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleSubmitFeedback(volunteer._id)}
+                                      disabled={submittingFeedback || feedbackComment.length < 10}
+                                      className="flex-1 px-3 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg text-sm font-semibold hover:from-green-700 hover:to-green-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
+                                    >
+                                      {submittingFeedback ? 'Submitting...' : 'Submit Rating'}
+                                    </button>
+                                    <button
+                                      onClick={() => setShowFeedbackForm(null)}
+                                      disabled={submittingFeedback}
+                                      className="px-3 py-2 border-2 border-gray-300 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 disabled:opacity-50 transition-all"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

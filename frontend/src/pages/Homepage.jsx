@@ -37,7 +37,7 @@ const Homepage = () => {
               </Link>
               <Link
                 to="/register"
-                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold text-sm hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-300"
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold text-sm hover:from-blue-700 hover:to-indigo-700 hover:text-white shadow-md hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-300"
               >
                 Get Started
               </Link>
@@ -87,14 +87,14 @@ const Homepage = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Link
                 to="/register"
-                className="group px-8 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-bold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-300"
+                className="group px-8 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-bold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/30 hover:-translate-y-0.5 hover:text-white transition-all duration-300"
               >
                 Join Now – It's Free
                 <span className="inline-block ml-2 group-hover:translate-x-1 transition-transform duration-300">&rarr;</span>
               </Link>
               <Link
                 to="/login"
-                className="px-8 py-4 bg-white/5 backdrop-blur-sm text-white border border-white/20 rounded-xl font-semibold text-lg hover:bg-white/10 hover:border-white/30 transition-all duration-300"
+                className="px-8 py-4 bg-white/5 backdrop-blur-sm text-white border border-white/20 rounded-xl font-semibold text-lg hover:bg-white/10 hover:border-white/30 hover:text-white transition-all duration-300"
               >
                 Sign In
               </Link>
@@ -443,14 +443,14 @@ const Homepage = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Link
                 to="/register"
-                className="group px-8 py-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-300"
+                className="group px-8 py-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 hover:text-white transition-all duration-300"
               >
                 Get Started Now
                 <span className="inline-block ml-2 group-hover:translate-x-1 transition-transform duration-300">&rarr;</span>
               </Link>
               <Link
                 to="/login"
-                className="px-8 py-4 bg-white/10 backdrop-blur-sm text-white font-semibold text-lg rounded-xl border border-white/20 hover:bg-white/15 hover:border-white/30 transition-all duration-300"
+                className="px-8 py-4 bg-white/10 backdrop-blur-sm text-white font-semibold text-lg rounded-xl border border-white/20 hover:bg-white/15 hover:border-white/30 hover:text-white transition-all duration-300"
               >
                 Learn More
               </Link>

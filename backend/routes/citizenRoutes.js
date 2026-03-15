@@ -21,4 +21,7 @@ router.get('/events', citizenController.getAllEvents);
 // Notifications
 router.get('/notifications', citizenController.getNotifications);
 
+// Help Request Analytics (Citizen Only)
+router.get('/analytics/help-requests', citizenController.getHelpRequestAnalytics);
+
 export default router;
