@@ -39,6 +39,22 @@ api.interceptors.response.use(
       localStorage.removeItem('role')
       window.location.href = '/login'
     }
+
+    if (
+      error.response?.status === 403 &&
+      typeof error.response?.data?.message === 'string' &&
+      error.response.data.message.toLowerCase().includes('disabled')
+    ) {
+      sessionStorage.setItem(
+        'auth_disabled_notice',
+        'Account disabled by admin. Please contact support.'
+      )
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('role')
+      window.location.href = '/login'
+    }
+
     return Promise.reject(error)
   }
 )

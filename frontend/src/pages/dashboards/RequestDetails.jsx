@@ -24,6 +24,19 @@ const RequestDetails = () => {
     const [submittingFeedback, setSubmittingFeedback] = useState(false);
     const statusTrackerRef = useRef(null);
 
+    const normalizeMessage = (message = {}) => {
+        const senderId = message.senderId || message.sender?.id || message.sender?._id || message.sender;
+        const senderName = message.senderName || message.sender?.name || message.sender?.fullName || 'Unknown';
+
+        return {
+            _id: message._id,
+            senderId: senderId ? senderId.toString() : '',
+            senderName,
+            message: message.message || message.content || '',
+            timestamp: message.timestamp || message.createdAt || new Date().toISOString()
+        };
+    };
+
     useEffect(() => {
         fetchRequestDetails();
         fetchMessages();
@@ -32,24 +45,42 @@ const RequestDetails = () => {
     // Socket.IO setup for real-time communication
     useEffect(() => {
         if (request && user) {
-            socketService.joinEventChat(id, user._id, user.fullName, user.role);
+            const socket = socketService.initializeSocket();
+
+            const joinRealtimeRooms = () => {
+                socketService.joinEventChat(id, user._id, user.fullName, user.role);
+                socketService.joinEventRoom(id, user._id, user.fullName, user.role);
+            };
+
+            joinRealtimeRooms();
+            socket.on('connect', joinRealtimeRooms);
             
             const handleNewMessage = (message) => {
-                setMessages(prev => [...prev, message]);
+                const normalizedMessage = normalizeMessage(message);
+                setMessages(prev => {
+                    if (normalizedMessage._id && prev.some(existing => existing._id === normalizedMessage._id)) {
+                        return prev;
+                    }
+                    return [...prev, normalizedMessage];
+                });
             };
             
             const handleStatusUpdate = (data) => {
-                if (data.eventId === id) {
+                if (data.eventId?.toString() === id?.toString()) {
                     fetchRequestDetails();
                 }
             };
 
-            socketService.onNewMessage(handleNewMessage);
+            socketService.removeMessageListener();
+            socketService.onReceiveMessage(handleNewMessage);
             socketService.onStatusUpdated(handleStatusUpdate);
 
             return () => {
-                socketService.socket?.off('receiveMessage', handleNewMessage);
-                socketService.socket?.off('volunteerStatusUpdated', handleStatusUpdate);
+                socket.emit('leaveEventChat');
+                socket.emit('leaveEventRoom', { eventId: id });
+                socket.off('connect', joinRealtimeRooms);
+                socketService.removeMessageListener();
+                socketService.offStatusUpdated(handleStatusUpdate);
             };
         }
     }, [request, user?._id, id]);
@@ -91,7 +122,7 @@ const RequestDetails = () => {
 
             if (response.ok) {
                 const data = await response.json();
-                setMessages(data.messages || []);
+                setMessages((data.messages || []).map(normalizeMessage));
             }
         } catch (error) {
             console.error('Error fetching messages:', error);
@@ -118,6 +149,17 @@ const RequestDetails = () => {
 
             if (!response.ok) {
                 throw new Error('Failed to send message');
+            }
+
+            const data = await response.json();
+            if (data?.messagePayload) {
+                const normalizedMessage = normalizeMessage(data.messagePayload);
+                setMessages(prev => {
+                    if (normalizedMessage._id && prev.some(existing => existing._id === normalizedMessage._id)) {
+                        return prev;
+                    }
+                    return [...prev, normalizedMessage];
+                });
             }
 
             // Message will be added via socket
@@ -201,6 +243,22 @@ const RequestDetails = () => {
             default:
                 return 'bg-gray-100 text-gray-800 border-gray-200';
         }
+    };
+
+    const statusFlow = ['Pending', 'Assigned', 'In Progress', 'Completed'];
+
+    const getAssignmentProgressStatus = (assignment = {}) => {
+        if (assignment.participationStatus === 'Declined') return 'Declined';
+
+        if (statusFlow.includes(assignment.status)) {
+            return assignment.status;
+        }
+
+        if (assignment.participationStatus === 'Accepted') {
+            return 'Assigned';
+        }
+
+        return 'Pending';
     };
 
     if (loading) {
@@ -370,23 +428,23 @@ const RequestDetails = () => {
                                         messages.map((msg, index) => (
                                             <div
                                                 key={index}
-                                                className={`flex ${msg.senderId === user?._id ? 'justify-end' : 'justify-start'}`}
+                                                className={`flex ${msg.senderId?.toString() === user?._id?.toString() ? 'justify-end' : 'justify-start'}`}
                                             >
                                                 <div
                                                     className={`p-3 rounded-lg max-w-[75%] shadow-sm ${
-                                                        msg.senderId === user?._id
+                                                        msg.senderId?.toString() === user?._id?.toString()
                                                             ? 'bg-blue-600 text-white'
                                                             : 'bg-white text-gray-800 border border-gray-200'
                                                     }`}
                                                 >
                                                     <div className={`font-semibold text-xs mb-1 ${
-                                                        msg.senderId === user?._id ? 'text-blue-100' : 'text-gray-600'
+                                                        msg.senderId?.toString() === user?._id?.toString() ? 'text-blue-100' : 'text-gray-600'
                                                     }`}>
                                                         {msg.senderName}
                                                     </div>
                                                     <div className="break-words">{msg.message}</div>
                                                     <div className={`text-xs mt-1 ${
-                                                        msg.senderId === user?._id ? 'text-blue-200' : 'text-gray-400'
+                                                        msg.senderId?.toString() === user?._id?.toString() ? 'text-blue-200' : 'text-gray-400'
                                                     }`}>
                                                         {new Date(msg.timestamp).toLocaleTimeString()}
                                                     </div>
@@ -421,39 +479,9 @@ const RequestDetails = () => {
 
                     {/* Right Column - Status Tracker & Volunteers */}
                     <div className="space-y-6">
-                        {/* Status Tracker */}
+                        {/* Volunteer Status Tracker */}
                         <div ref={statusTrackerRef} className="bg-white rounded-xl shadow-md border border-gray-200 p-6 sticky top-6">
-                            <h3 className="text-lg font-bold text-gray-800 mb-4">Status Tracker</h3>
-                            
-                            <div className="space-y-4">
-                                {['Pending', 'Assigned', 'In Progress', 'Completed'].map((status, index) => {
-                                    const currentStatusIndex = ['Pending', 'Assigned', 'In Progress', 'Completed'].indexOf(request.trackingStatus || request.status || 'Pending');
-                                    const isActive = index <= currentStatusIndex;
-                                    const isCurrent = status === (request.trackingStatus || request.status);
-                                    
-                                    return (
-                                        <div key={status} className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm ${
-                                                isActive 
-                                                    ? isCurrent 
-                                                        ? 'bg-blue-600 text-white ring-4 ring-blue-200' 
-                                                        : 'bg-green-500 text-white'
-                                                    : 'bg-gray-200 text-gray-500'
-                                            }`}>
-                                                {isActive && !isCurrent ? '✓' : index + 1}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className={`font-semibold ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>
-                                                    {status}
-                                                </div>
-                                                {isCurrent && (
-                                                    <div className="text-xs text-blue-600 font-medium">Current Status</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                            <h3 className="text-lg font-bold text-gray-800 mb-4">Volunteer Status Trackers</h3>
 
                             {/* Participating Volunteers */}
                             {request.volunteerAssignments?.length > 0 && (
@@ -466,6 +494,8 @@ const RequestDetails = () => {
                                             const volunteer = assignment.volunteerId;
                                             const isAccepted = assignment.participationStatus === 'Accepted';
                                             const isCompleted = assignment.status === 'Completed';
+                                            const assignmentProgressStatus = getAssignmentProgressStatus(assignment);
+                                            const assignmentStatusIndex = statusFlow.indexOf(assignmentProgressStatus);
                                             const isFormVisible = showFeedbackForm === volunteer?._id;
                                             const existingRating = assignment.ratings?.find(r => r.ratedBy?.toString() === user?._id?.toString());
                                             const allRatings = assignment.ratings || [];
@@ -523,6 +553,42 @@ const RequestDetails = () => {
                                                             {isAccepted ? '✓' : '✗'}
                                                         </div>
                                                     </div>
+
+                                                    {assignment.participationStatus === 'Declined' ? (
+                                                        <div className="mt-3 p-3 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-600 font-medium">
+                                                            This volunteer declined the help request.
+                                                        </div>
+                                                    ) : (
+                                                        <div className="mt-3 p-3 rounded-lg border border-gray-200 bg-white">
+                                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Individual Progress</p>
+                                                            <div className="space-y-2">
+                                                                {statusFlow.map((status, statusIndex) => {
+                                                                    const isReached = assignmentStatusIndex >= 0 && statusIndex <= assignmentStatusIndex;
+                                                                    const isCurrent = status === assignmentProgressStatus;
+
+                                                                    return (
+                                                                        <div key={`${volunteer?._id || index}-${status}`} className="flex items-center gap-2">
+                                                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                                                                isReached
+                                                                                    ? isCurrent
+                                                                                        ? 'bg-blue-600 text-white'
+                                                                                        : 'bg-green-500 text-white'
+                                                                                    : 'bg-gray-200 text-gray-500'
+                                                                            }`}>
+                                                                                {isReached && !isCurrent ? '✓' : statusIndex + 1}
+                                                                            </div>
+                                                                            <span className={`text-sm ${isReached ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
+                                                                                {status}
+                                                                            </span>
+                                                                            {isCurrent && (
+                                                                                <span className="text-xs text-blue-600 font-semibold">Current</span>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
 
                                                     {/* Rating Section - Only for Citizens and Completed Status */}
                                                     {isCompleted && (

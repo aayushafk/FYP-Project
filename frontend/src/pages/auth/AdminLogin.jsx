@@ -52,10 +52,14 @@ const AdminLogin = () => {
       navigate('/admin/dashboard', { replace: true })
     } catch (error) {
       console.error('Admin Login error:', error)
-      const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Invalid admin credentials.'
+      const isUnauthorized = error.response?.status === 401
+      const errorMessage = isUnauthorized
+        ? 'Invalid credentials'
+        : (
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          'Login failed. Please try again.'
+        )
       setLoginError(errorMessage)
     } finally {
       setIsLoading(false)

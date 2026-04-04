@@ -11,6 +11,7 @@ const VolunteerDashboard = () => {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState([]);
     const [availableHelpRequests, setAvailableHelpRequests] = useState([]);
+    const [acceptedHelpRequests, setAcceptedHelpRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [deletingId, setDeletingId] = useState(null);
     const [eventParticipationStatus, setEventParticipationStatus] = useState({});
@@ -36,19 +37,24 @@ const VolunteerDashboard = () => {
     }, []);
 
     const fetchNotifications = async () => {
+        let eventNotifications = [];
+
         try {
             const response = await api.get('/volunteer/notifications');
-            const eventNotifications = response.data.filter(n => n.type === 'skill_matched_event');
+            eventNotifications = (response.data || []).filter((notification) =>
+                ['skill_matched_event', 'skill_matched_request', 'emergency_help_request'].includes(notification.type)
+            );
             setNotifications(eventNotifications);
-            
-            // Fetch available help requests (citizen requests)
-            await fetchAvailableHelpRequests();
-            
-            // Fetch participation status for each event
-            await fetchParticipationStatuses(eventNotifications);
         } catch (error) {
             console.error('Error fetching notifications:', error);
+            setNotifications([]);
         } finally {
+            // Load persisted volunteer data regardless of notification fetch result.
+            await Promise.all([
+                fetchAvailableHelpRequests(),
+                fetchAcceptedHelpRequests(),
+                fetchParticipationStatuses(eventNotifications)
+            ]);
             setLoading(false);
         }
     };
@@ -56,13 +62,62 @@ const VolunteerDashboard = () => {
     const fetchAvailableHelpRequests = async () => {
         try {
             const response = await api.get('/volunteer/available-events');
-            // Filter to show only citizen help requests that are pending
-            const helpRequests = (response.data.events || []).filter(
-                event => event.type === 'citizen' && event.trackingStatus === 'Pending'
-            );
+            // Show citizen requests that are still active and not full.
+            const helpRequests = (response.data.events || []).filter((event) => {
+                if (event.type !== 'citizen') return false;
+                if (event.trackingStatus === 'Completed') return false;
+
+                if (event.volunteersNeeded > 0) {
+                    const assignedCount = Array.isArray(event.assignedVolunteers)
+                        ? event.assignedVolunteers.length
+                        : 0;
+                    if (assignedCount >= event.volunteersNeeded) return false;
+                }
+
+                return true;
+            });
             setAvailableHelpRequests(helpRequests);
         } catch (error) {
             console.error('Error fetching available help requests:', error);
+        }
+    };
+
+    const fetchAcceptedHelpRequests = async () => {
+        try {
+            const response = await api.get('/volunteer/my-events');
+            const events = response.data?.events || [];
+
+            const acceptedRequests = events.filter((event) => {
+                if (event.type !== 'citizen') return false;
+
+                const assignments = Array.isArray(event.volunteerAssignments)
+                    ? event.volunteerAssignments
+                    : [];
+
+                const myAcceptedAssignment = assignments.find((assignment) => {
+                    const volunteerId = assignment?.volunteerId?._id || assignment?.volunteerId;
+                    return (
+                        volunteerId?.toString() === user?._id?.toString() &&
+                        assignment.participationStatus === 'Accepted'
+                    );
+                });
+
+                if (myAcceptedAssignment) return true;
+
+                const assignedVolunteers = Array.isArray(event.assignedVolunteers)
+                    ? event.assignedVolunteers
+                    : [];
+
+                return assignedVolunteers.some((volunteer) => {
+                    const volunteerId = volunteer?._id || volunteer;
+                    return volunteerId?.toString() === user?._id?.toString();
+                });
+            });
+
+            setAcceptedHelpRequests(acceptedRequests);
+        } catch (error) {
+            console.error('Error fetching accepted help requests:', error);
+            setAcceptedHelpRequests([]);
         }
     };
 
@@ -396,6 +451,76 @@ const VolunteerDashboard = () => {
                 </div>
 
                 {/* Available Help Requests Section */}
+                {acceptedHelpRequests.length > 0 && (
+                    <div className="mt-12 animate-slideInRight">
+                        <div className="mb-8">
+                            <div className="flex items-center gap-3 mb-2">
+                                <span className="text-3xl">✅</span>
+                                <h2 className="text-3xl font-bold text-gray-900">Your Help Request History</h2>
+                                <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold text-lg border-2 border-green-300">
+                                    {acceptedHelpRequests.length}
+                                </span>
+                            </div>
+                            <p className="text-lg text-gray-600 font-medium ml-9">Active and previous requests you accepted</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {acceptedHelpRequests.map((request, index) => (
+                                <div
+                                    key={request._id}
+                                    className="bg-green-50 rounded-xl shadow-sm border border-green-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-6 group animate-slideInUp"
+                                    style={{ animationDelay: `${index * 0.05}s` }}
+                                >
+                                    <div className="mb-3 flex items-center gap-2">
+                                        <span className="inline-flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase">
+                                            Accepted
+                                        </span>
+                                        {request.trackingStatus && (
+                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white border border-gray-300 text-gray-700 uppercase">
+                                                {request.trackingStatus}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <h3 className="text-xl font-bold text-gray-900 mb-4 line-clamp-2 group-hover:text-green-700 transition-colors">
+                                        {request.title}
+                                    </h3>
+
+                                    <div className="space-y-3 mb-6">
+                                        {request.category && (
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-gray-500">📋</span>
+                                                <span className="text-gray-700 font-medium">{request.category}</span>
+                                            </div>
+                                        )}
+
+                                        {request.location && (
+                                            <div className="flex items-center gap-3">
+                                                <MapPin size={18} className="text-red-500 flex-shrink-0" />
+                                                <span className="text-gray-700 font-medium">{request.location}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex gap-3 pt-4 border-t border-green-200">
+                                        <button
+                                            onClick={() => navigate(`/event/${request._id}`)}
+                                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-3 px-4 rounded-lg hover:from-green-700 hover:to-emerald-700 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-base shadow-sm"
+                                        >
+                                            <span className="flex items-center justify-center gap-2">
+                                                {request.trackingStatus === 'Completed' ? 'View Details' : 'Continue Helping'}
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {availableHelpRequests.length > 0 && (
                     <div className="mt-12 animate-slideInRight">
                         <div className="mb-8">

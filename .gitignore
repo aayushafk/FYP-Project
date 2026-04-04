@@ -9,6 +9,8 @@ node_modules/
 # Production
 /build
 /dist
+dist/
+frontend/dist/
 
 # Misc
 .DS_Store

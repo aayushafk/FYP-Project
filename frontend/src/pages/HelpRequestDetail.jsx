@@ -18,12 +18,20 @@ const HelpRequestDetail = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [location, setLocation] = useState(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(null);
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const statusTrackerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const sendLockRef = useRef(false);
 
   const normalizeMessage = (message = {}) => {
     const senderId = message.senderId || message.sender?.id || message.sender?._id || message.sender;
@@ -34,8 +42,48 @@ const HelpRequestDetail = () => {
       senderId: senderId ? senderId.toString() : '',
       senderName,
       message: message.message || message.content || '',
+      image: message.image || null,
+      location: message.location || null,
       timestamp: message.timestamp || message.createdAt || new Date().toISOString()
     };
+  };
+
+  const resolveImageUrl = (imagePath) => {
+    if (!imagePath) return '';
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+
+    const apiOrigin = API_BASE_URL.replace(/\/api\/?$/, '');
+    const normalizedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+
+    if (normalizedPath.startsWith('/api/')) {
+      return `${apiOrigin}${normalizedPath}`;
+    }
+
+    if (normalizedPath.startsWith('/uploads/')) {
+      return `${apiOrigin}/api${normalizedPath}`;
+    }
+
+    return `${API_BASE_URL}${normalizedPath}`;
+  };
+
+  const getLocationMapUrl = (locationData) => {
+    if (!locationData) return null;
+    if (locationData.lat && locationData.lng) {
+      return `https://www.google.com/maps?q=${locationData.lat},${locationData.lng}`;
+    }
+    if (locationData.address) {
+      return `https://www.google.com/maps?q=${encodeURIComponent(locationData.address)}`;
+    }
+    return null;
+  };
+
+  const hasUsableLocation = (locationData) => {
+    if (!locationData) return false;
+    if (locationData.lat && locationData.lng) return true;
+    if (typeof locationData.address === 'string' && locationData.address.trim()) return true;
+    return false;
   };
 
   useEffect(() => {
@@ -67,6 +115,7 @@ const HelpRequestDetail = () => {
         }
       };
 
+      socket.off('receiveMessage', handleNewMessage);
       socket.on('receiveMessage', handleNewMessage);
       socketService.onStatusUpdated(handleStatusUpdate);
 
@@ -155,8 +204,9 @@ const HelpRequestDetail = () => {
       
       showToast({ type: 'success', message: 'Help request accepted! You can now update the status.' });
       
-      // Refresh request details to show updated state
-      await fetchRequestDetails();
+      // Refresh request details and chat history so existing citizen messages
+      // become visible immediately after acceptance.
+      await Promise.all([fetchRequestDetails(), fetchMessages()]);
     } catch (error) {
       console.error('Error accepting request:', error);
       showToast({ type: 'error', message: error.message });
@@ -200,7 +250,7 @@ const HelpRequestDetail = () => {
   };
 
   const handleStatusUpdate = async (newStatus) => {
-    if (user?.role !== 'volunteer' && user?.role !== 'citizen') {
+    if (user?.role !== 'volunteer') {
       showToast({ type: 'error', message: 'Unauthorized to update status' });
       return;
     }
@@ -211,21 +261,11 @@ const HelpRequestDetail = () => {
       return;
     }
 
-    if (user.role === 'citizen' && !isCreator()) {
-      showToast({ type: 'error', message: 'Only the creator can update this request' });
-      return;
-    }
-
     try {
       setUpdatingStatus(true);
       const token = localStorage.getItem('token');
-      
-      // Use appropriate endpoint based on role
-      const endpoint = user.role === 'citizen' 
-        ? `/citizen/request/${id}/status`
-        : `/volunteer/event/${id}/status`;
-      
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+
+      const response = await fetch(`${API_BASE_URL}/volunteer/event/${id}/status`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -251,61 +291,126 @@ const HelpRequestDetail = () => {
     }
   };
 
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast({ type: 'error', message: 'Image size should be less than 5MB' });
+      return;
+    }
+
+    setSelectedImage(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      showToast({ type: 'error', message: 'Geolocation is not supported by your browser' });
+      return;
+    }
+
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await response.json();
+          const address = data.display_name || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+
+          setLocation({ lat: latitude, lng: longitude, address });
+          setShowLocationPicker(true);
+          showToast({ type: 'success', message: 'Location captured!' });
+        } catch (error) {
+          setLocation({
+            lat: latitude,
+            lng: longitude,
+            address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+          });
+          setShowLocationPicker(true);
+        }
+        setGettingLocation(false);
+      },
+      () => {
+        setGettingLocation(false);
+        showToast({ type: 'error', message: 'Failed to get your location' });
+      }
+    );
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
-
-    const outgoingMessage = newMessage.trim();
+    if (!newMessage.trim() && !selectedImage && !location) return;
+    if (sendLockRef.current) return;
+    sendLockRef.current = true;
 
     try {
       setSendingMessage(true);
+      let imageUrl = null;
+
+      if (selectedImage) {
+        setUploadingImage(true);
+        const formData = new FormData();
+        formData.append('image', selectedImage);
+        formData.append('eventId', id);
+
+        const token = localStorage.getItem('token');
+        const uploadResponse = await fetch(`${API_BASE_URL}/upload/image`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload image');
+        }
+
+        const uploadData = await uploadResponse.json();
+        imageUrl = uploadData.imageUrl;
+        setUploadingImage(false);
+      }
       
       // Ensure socket is connected
       await socketService.ensureConnected();
       socketService.joinEventChat(id, user._id, user.fullName, user.role);
 
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/chat/event/${id}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: outgoingMessage })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to send message');
+      let outgoingMessage = newMessage.trim();
+      if (!outgoingMessage) {
+        const parts = [];
+        if (imageUrl) parts.push('📷 Image');
+        if (location) parts.push('📍 Location');
+        outgoingMessage = parts.join(' + ') || 'Message';
       }
 
-      const payload = await response.json();
-      const savedMessage = normalizeMessage(payload?.data || {
-        senderId: user?._id,
-        senderName: user?.fullName,
-        message: outgoingMessage,
-        timestamp: new Date().toISOString()
-      });
-
-      setMessages(prev => {
-        if (savedMessage._id && prev.some(existing => existing._id === savedMessage._id)) {
-          return prev;
-        }
-        return [...prev, savedMessage];
-      });
-
-      const socket = socketService.getSocket();
-      socket.emit('sendMessage', {
-        eventId: id,
-        message: outgoingMessage
-      });
+      socketService.sendMessage(id, outgoingMessage, imageUrl, location);
 
       setNewMessage('');
+      clearImage();
+      setLocation(null);
+      setShowLocationPicker(false);
       showToast({ type: 'success', message: 'Message sent!' });
     } catch (error) {
       console.error('Error sending message:', error);
       showToast({ type: 'error', message: error.message });
     } finally {
       setSendingMessage(false);
+      setUploadingImage(false);
+      sendLockRef.current = false;
     }
   };
 
@@ -370,6 +475,21 @@ const HelpRequestDetail = () => {
     }
   };
 
+  const statusFlow = ['Pending', 'Assigned', 'In Progress', 'Completed'];
+
+  const getAssignmentProgressStatus = (assignment = {}) => {
+    if (assignment.participationStatus === 'Declined') return 'Declined';
+
+    if (statusFlow.includes(assignment.status)) {
+      return assignment.status;
+    }
+
+    if (assignment.participationStatus === 'Accepted') {
+      return 'Assigned';
+    }
+
+    return 'Pending';
+  };
   const formatDate = (value) => {
     if (!value) return 'N/A';
     const parsedDate = new Date(value);
@@ -481,8 +601,6 @@ const HelpRequestDetail = () => {
 
   const canUpdateStatus = () => {
     if (!request || !user) return false;
-    // Citizen (creator) can always update
-    if (user.role === 'citizen' && isCreator()) return true;
     // Volunteer can update only if assigned and status is Assigned/Accepted
     if (user.role === 'volunteer') return canVolunteerUpdateStatus();
     return false;
@@ -665,7 +783,58 @@ const HelpRequestDetail = () => {
                           }`}>
                             {msg.senderName}
                           </div>
-                          <div className="break-words">{msg.message}</div>
+                          {msg.message && <div className="break-words">{msg.message}</div>}
+
+                          {msg.image && (
+                            <div className="mt-2 mb-2">
+                              <img
+                                src={resolveImageUrl(msg.image)}
+                                alt="Shared image"
+                                className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(resolveImageUrl(msg.image), '_blank')}
+                                style={{ maxHeight: '300px' }}
+                              />
+                            </div>
+                          )}
+
+                          {hasUsableLocation(msg.location) && (
+                            <div
+                              className={`mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg ${getLocationMapUrl(msg.location) ? 'cursor-pointer hover:bg-blue-100 transition-colors' : ''}`}
+                              onClick={() => {
+                                const url = getLocationMapUrl(msg.location);
+                                if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                              }}
+                              role={getLocationMapUrl(msg.location) ? 'button' : undefined}
+                              tabIndex={getLocationMapUrl(msg.location) ? 0 : undefined}
+                              onKeyDown={(event) => {
+                                if ((event.key === 'Enter' || event.key === ' ') && getLocationMapUrl(msg.location)) {
+                                  event.preventDefault();
+                                  window.open(getLocationMapUrl(msg.location), '_blank', 'noopener,noreferrer');
+                                }
+                              }}
+                            >
+                              <div className="flex items-center gap-2 text-blue-800">
+                                <span className="text-lg">📍</span>
+                                <div className="flex-1">
+                                  <div className="font-semibold text-sm">Location Shared</div>
+                                  {msg.location.address && (
+                                    <div className="text-xs text-blue-700 mt-1">{msg.location.address}</div>
+                                  )}
+                                  {getLocationMapUrl(msg.location) && (
+                                    <a
+                                      href={getLocationMapUrl(msg.location)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(event) => event.stopPropagation()}
+                                      className="text-xs text-blue-600 hover:text-blue-800 underline mt-1 inline-block"
+                                    >
+                                      View on Google Maps →
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           <div className={`text-xs mt-1 ${
                             msg.senderId === user?._id ? 'text-blue-200' : 'text-gray-400'
                           }`}>
@@ -679,7 +848,73 @@ const HelpRequestDetail = () => {
 
                 {/* Message Input */}
                 <form onSubmit={handleSendMessage} className="border-t border-gray-200 p-3 bg-white">
+                  {imagePreview && (
+                    <div className="mb-3 relative inline-block">
+                      <img src={imagePreview} alt="Preview" className="h-20 w-20 object-cover rounded-lg border-2 border-blue-400" />
+                      <button
+                        type="button"
+                        onClick={clearImage}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 text-xs font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  {location && showLocationPicker && (
+                    <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-blue-900">📍 Location Added</span>
+                        <button
+                          type="button"
+                          onClick={() => { setLocation(null); setShowLocationPicker(false); }}
+                          className="text-red-600 hover:text-red-700 text-sm font-medium"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <p className="text-xs text-blue-700">{location.address}</p>
+                    </div>
+                  )}
+
+                  {uploadingImage && (
+                    <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-sm text-yellow-800">Uploading image...</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
+                    <div className="flex gap-1">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageSelect}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingImage}
+                        className="px-3 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Attach image"
+                      >
+                        📷
+                      </button>
+                      <button
+                        type="button"
+                        onClick={getCurrentLocation}
+                        disabled={gettingLocation}
+                        className="px-3 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Share your location"
+                      >
+                        {gettingLocation ? '📡' : '📍'}
+                      </button>
+                    </div>
+
                     <input
                       type="text"
                       value={newMessage}
@@ -689,7 +924,7 @@ const HelpRequestDetail = () => {
                     />
                     <button
                       type="submit"
-                      disabled={sendingMessage || !newMessage.trim()}
+                      disabled={sendingMessage || uploadingImage || (!newMessage.trim() && !selectedImage && !location)}
                       className="px-5 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                     >
                       {sendingMessage ? 'Sending...' : 'Send'}
@@ -703,37 +938,7 @@ const HelpRequestDetail = () => {
           {/* Right Column - Status Tracker */}
           <div className="space-y-6">
             <div ref={statusTrackerRef} className="bg-white rounded-xl shadow-md border border-gray-200 p-6 sticky top-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Status Tracker</h3>
-              
-              <div className="space-y-4">
-                {['Pending', 'Assigned', 'In Progress', 'Completed'].map((status, index) => {
-                  const currentStatusIndex = ['Pending', 'Assigned', 'In Progress', 'Completed'].indexOf(request.trackingStatus || request.status || 'Pending');
-                  const isActive = index <= currentStatusIndex;
-                  const isCurrent = status === (request.trackingStatus || request.status);
-                  
-                  return (
-                    <div key={status} className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm ${
-                        isActive 
-                          ? isCurrent 
-                            ? 'bg-blue-600 text-white ring-4 ring-blue-200' 
-                            : 'bg-green-500 text-white'
-                          : 'bg-gray-200 text-gray-500'
-                      }`}>
-                        {isActive && !isCurrent ? '✓' : index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <div className={`font-semibold ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>
-                          {status}
-                        </div>
-                        {isCurrent && (
-                          <div className="text-xs text-blue-600 font-medium">Current Status</div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-4">Volunteer Status Trackers</h3>
 
               {/* Accept/Decline Buttons - Only for volunteers who haven't accepted yet */}
               {user?.role === 'volunteer' && !isVolunteerAssigned() && (request.trackingStatus === 'Pending' || request.status === 'Pending') && (
@@ -788,8 +993,8 @@ const HelpRequestDetail = () => {
                 </div>
               )}
 
-              {/* Status Update Section */}
-              {(user?.role === 'citizen' || user?.role === 'volunteer') && (
+              {/* Status Update Section (Volunteer only) */}
+              {user?.role === 'volunteer' && (
                 <div className="mt-6 space-y-2">
                   {/* Show message if volunteer can't update */}
                   {user?.role === 'volunteer' && !canUpdateStatus() && isVolunteerAssigned() && (
@@ -852,6 +1057,9 @@ const HelpRequestDetail = () => {
                       const volunteerDisplayName = getVolunteerDisplayName(assignment, index);
                       const isAccepted = assignment.participationStatus === 'Accepted';
                       const isCompleted = assignment.status === 'Completed';
+
+                      const assignmentProgressStatus = getAssignmentProgressStatus(assignment);
+                      const assignmentStatusIndex = statusFlow.indexOf(assignmentProgressStatus);
                       const isFormVisible = showFeedbackForm === volunteerIdValue;
                       const safeRatings = Array.isArray(assignment.ratings) ? assignment.ratings : [];
                       const existingRating = safeRatings.find(r => r.ratedBy?.toString() === user?._id?.toString());
@@ -910,6 +1118,42 @@ const HelpRequestDetail = () => {
                               {isAccepted ? '✓' : '✗'}
                             </div>
                           </div>
+
+                          {assignment.participationStatus === 'Declined' ? (
+                            <div className="mt-3 p-3 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-600 font-medium">
+                              This volunteer declined the help request.
+                            </div>
+                          ) : (
+                            <div className="mt-3 p-3 rounded-lg border border-gray-200 bg-white">
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Individual Progress</p>
+                              <div className="space-y-2">
+                                {statusFlow.map((status, statusIndex) => {
+                                  const isReached = assignmentStatusIndex >= 0 && statusIndex <= assignmentStatusIndex;
+                                  const isCurrent = status === assignmentProgressStatus;
+
+                                  return (
+                                    <div key={`${volunteerIdValue || index}-${status}`} className="flex items-center gap-2">
+                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        isReached
+                                          ? isCurrent
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-green-500 text-white'
+                                          : 'bg-gray-200 text-gray-500'
+                                      }`}>
+                                        {isReached && !isCurrent ? '✓' : statusIndex + 1}
+                                      </div>
+                                      <span className={`text-sm ${isReached ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
+                                        {status}
+                                      </span>
+                                      {isCurrent && (
+                                        <span className="text-xs text-blue-600 font-semibold">Current</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Rating Section - Only for Citizens and Completed Status */}
                           {user?.role === 'citizen' && isCompleted && (

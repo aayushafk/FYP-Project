@@ -34,6 +34,7 @@ const EventDetailPage = () => {
   const statusTrackerRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const sendLockRef = useRef(false);
 
   const getComparableId = (value) => {
     if (!value) return null;
@@ -45,6 +46,44 @@ const EventDetailPage = () => {
     const senderId = msg?.sender?.id || msg?.sender?._id || msg?.senderId;
     if (!senderId || !user?._id) return false;
     return senderId.toString() === user._id.toString();
+  };
+
+  const resolveImageUrl = (imagePath) => {
+    if (!imagePath) return '';
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+
+    const apiOrigin = API_BASE_URL.replace(/\/api\/?$/, '');
+    const normalizedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+
+    if (normalizedPath.startsWith('/api/')) {
+      return `${apiOrigin}${normalizedPath}`;
+    }
+
+    if (normalizedPath.startsWith('/uploads/')) {
+      return `${apiOrigin}/api${normalizedPath}`;
+    }
+
+    return `${API_BASE_URL}${normalizedPath}`;
+  };
+
+  const getLocationMapUrl = (locationData) => {
+    if (!locationData) return null;
+    if (locationData.lat && locationData.lng) {
+      return `https://www.google.com/maps?q=${locationData.lat},${locationData.lng}`;
+    }
+    if (locationData.address) {
+      return `https://www.google.com/maps?q=${encodeURIComponent(locationData.address)}`;
+    }
+    return null;
+  };
+
+  const hasUsableLocation = (locationData) => {
+    if (!locationData) return false;
+    if (locationData.lat && locationData.lng) return true;
+    if (typeof locationData.address === 'string' && locationData.address.trim()) return true;
+    return false;
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -138,38 +177,35 @@ const EventDetailPage = () => {
     if (!user || !eventId) return;
 
     const socket = socketService.initializeSocket();
-    
-    // Join event room for real-time updates
-    socketService.joinEventChat(eventId, user._id, user.fullName, user.role);
-    socket.emit('joinEventRoom', {
-      eventId,
-      userId: user._id,
-      userName: user.fullName,
-      userRole: user.role
-    });
+
+    const joinRealtimeRooms = () => {
+      socketService.joinEventChat(eventId, user._id, user.fullName, user.role);
+      socketService.joinEventRoom(eventId, user._id, user.fullName, user.role);
+    };
+
+    // Join immediately and re-join after reconnect so live updates keep working.
+    joinRealtimeRooms();
+    socket.on('connect', joinRealtimeRooms);
 
     // Listen for messages from other users
     const handleReceiveMessage = (message) => {
       console.log('📨 Received message via socket:', message);
-      // Only add if it's not from current user (to avoid duplicates)
-      if (!isOwnMessage(message)) {
-        setMessages(prev => {
-          // Check if message already exists
-          const exists = prev.some(m => m._id === message._id);
-          if (exists) return prev;
-          const updated = [...prev, message];
-          console.log('💬 Messages updated from socket, count:', updated.length);
-          return updated;
-        });
-      }
+      setMessages(prev => {
+        const exists = prev.some(m => m._id === message._id);
+        if (exists) return prev;
+        const updated = [...prev, message];
+        console.log('💬 Messages updated from socket, count:', updated.length);
+        return updated;
+      });
     };
-    
+
+    socketService.removeMessageListener();
     socketService.onReceiveMessage(handleReceiveMessage);
 
     // Listen for status updates (including self-updates for UI confirmation)
     const handleStatusUpdate = (data) => {
       console.log('📊 Status update received via socket:', data);
-      if (data.eventId === eventId) {
+      if (getComparableId(data.eventId) === getComparableId(eventId)) {
         // Handler for both self and other volunteer updates
         const isCurrentUser = getComparableId(data.volunteerId) === getComparableId(user?._id);
         
@@ -226,6 +262,7 @@ const EventDetailPage = () => {
       }
     };
     
+    socket.off('volunteerStatusUpdated', handleStatusUpdate);
     socket.on('volunteerStatusUpdated', handleStatusUpdate);
 
     // Listen for status update errors
@@ -242,6 +279,8 @@ const EventDetailPage = () => {
       console.log('🧹 Cleaning up socket listeners for eventId:', eventId);
       socket.emit('leaveEventChat');
       socket.emit('leaveEventRoom', { eventId });
+      socket.off('connect', joinRealtimeRooms);
+      socketService.removeMessageListener();
       socket.off('volunteerStatusUpdated', handleStatusUpdate);
       socket.off('statusUpdateError');
     };
@@ -484,17 +523,8 @@ const EventDetailPage = () => {
         return updatedEvent;
       });
       
-      // Emit socket event for real-time update to all users in the room.
-      const socket = socketService.getSocket();
-      socket.emit('volunteerStatusUpdate', {
-        eventId,
-        volunteerId: user._id,
-        volunteerName: user.fullName,
-        newStatus,
-        fromStatus: currentVolunteerStatus
-      });
-      
-      console.log('✅ Socket events emitted for status update');
+      // Backend now emits real-time updates after persisting status changes.
+      console.log('✅ Status persisted; waiting for server-sent realtime update');
 
       // Force-refresh from server truth to avoid stale UI when object shapes differ.
       await fetchEventDetails();
@@ -580,6 +610,8 @@ const EventDetailPage = () => {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() && !selectedImage && !location) return;
+    if (sendLockRef.current) return;
+    sendLockRef.current = true;
 
     console.log('📤 Starting to send message...', { hasText: !!newMessage.trim(), hasImage: !!selectedImage, hasLocation: !!location });
 
@@ -650,45 +682,7 @@ const EventDetailPage = () => {
         };
       }
 
-      console.log('💾 Saving message to database...', messageData);
-
-      // Save message to database
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/chat/event/${eventId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(messageData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to save message');
-      }
-
-      const savedMessage = await response.json();
-      console.log('✅ Message saved to database:', savedMessage);
-
-      // Immediately add message to local state for instant UI update
-      const newMessageObj = {
-        _id: savedMessage.data._id,
-        eventId,
-        message: messageData.message,
-        sender: {
-          id: user._id,
-          name: user.fullName,
-          role: user.role
-        },
-        timestamp: savedMessage.data.timestamp || new Date(),
-        image: imageUrl,
-        location: location
-      };
-      setMessages(prev => [...prev, newMessageObj]);
-      console.log('✅ Message added to local state immediately');
-
-      // Emit via socket for real-time delivery to other users
+      // Emit via socket; backend persists and broadcasts to all event participants
       console.log('📡 Emitting message via socket...');
       socketService.sendMessage(eventId, messageData.message, imageUrl, location);
       console.log('✅ Message emitted via socket');
@@ -706,6 +700,7 @@ const EventDetailPage = () => {
     } finally {
       setSendingMessage(false);
       setUploadingImage(false);
+      sendLockRef.current = false;
       console.log('🏁 Send message handler complete');
     }
   };
@@ -783,7 +778,7 @@ const EventDetailPage = () => {
     const currentIndex = statuses.findIndex(s => s.name === displayStatus);
     
     // Check if current user is this volunteer and can update status
-    const isCurrentVolunteer = user?._id === volunteerId;
+    const isCurrentVolunteer = getComparableId(user?._id) === getComparableId(volunteerId);
     const canUpdate = !isReadOnly && isCurrentVolunteer && canUpdateStatus();
 
     return (
@@ -1285,18 +1280,32 @@ const EventDetailPage = () => {
                           {msg.image && (
                             <div className="mt-2 mb-2">
                               <img  
-                                src={`${API_BASE_URL}${msg.image}`}
+                                src={resolveImageUrl(msg.image)}
                                 alt="Shared image"
                                 className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                                onClick={() => window.open(`${API_BASE_URL}${msg.image}`, '_blank')}
+                                onClick={() => window.open(resolveImageUrl(msg.image), '_blank')}
                                 style={{ maxHeight: '300px' }}
                               />
                             </div>
                           )}
                           
                           {/* Location Display with Link */}
-                          {msg.location && msg.location.lat && msg.location.lng && (
-                            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          {hasUsableLocation(msg.location) && (
+                            <div
+                              className={`mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg ${getLocationMapUrl(msg.location) ? 'cursor-pointer hover:bg-blue-100 transition-colors' : ''}`}
+                              onClick={() => {
+                                const url = getLocationMapUrl(msg.location);
+                                if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                              }}
+                              role={getLocationMapUrl(msg.location) ? 'button' : undefined}
+                              tabIndex={getLocationMapUrl(msg.location) ? 0 : undefined}
+                              onKeyDown={(event) => {
+                                if ((event.key === 'Enter' || event.key === ' ') && getLocationMapUrl(msg.location)) {
+                                  event.preventDefault();
+                                  window.open(getLocationMapUrl(msg.location), '_blank', 'noopener,noreferrer');
+                                }
+                              }}
+                            >
                               <div className="flex items-center gap-2 text-blue-800">
                                 <span className="text-lg">📍</span>
                                 <div className="flex-1">
@@ -1304,14 +1313,17 @@ const EventDetailPage = () => {
                                   {msg.location.address && (
                                     <div className="text-xs text-blue-700 mt-1">{msg.location.address}</div>
                                   )}
-                                  <a
-                                    href={`https://www.google.com/maps?q=${msg.location.lat},${msg.location.lng}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:text-blue-800 underline mt-1 inline-block"
-                                  >
-                                    View on Google Maps →
-                                  </a>
+                                  {getLocationMapUrl(msg.location) && (
+                                    <a
+                                      href={getLocationMapUrl(msg.location)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(event) => event.stopPropagation()}
+                                      className="text-xs text-blue-600 hover:text-blue-800 underline mt-1 inline-block"
+                                    >
+                                      View on Google Maps →
+                                    </a>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1519,11 +1531,11 @@ const EventDetailPage = () => {
             ) : (
               <div className="space-y-3">
                 {event.assignedVolunteers?.map((volunteer) => {
-                  const isCurrentUser = volunteer._id === user?._id;
+                  const isCurrentUser = getComparableId(volunteer._id) === getComparableId(user?._id);
                   
                   // Find volunteer's individual status from volunteerAssignments
                   const volunteerAssignment = event.volunteerAssignments?.find(
-                    va => va.volunteerId?._id === volunteer._id || va.volunteerId === volunteer._id
+                    va => getComparableId(va.volunteerId) === getComparableId(volunteer._id)
                   );
                   const volunteerStatus = volunteerAssignment?.status || 'Assigned';
                   
@@ -1587,7 +1599,7 @@ const EventDetailPage = () => {
 
           {/* Feedback Section - Show for volunteers who completed their tasks */}
           {(user?.role === 'organizer' || user?.role === 'citizen' || user?.role === 'user') && event.assignedVolunteers?.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+            <div className="bg-gray-50 rounded-2xl shadow-md border border-gray-200 p-6">
               <h3 className="text-xl font-bold text-gray-900 mb-6">Volunteer Feedback & Ratings</h3>
               
               <div className="space-y-4">
@@ -1616,7 +1628,7 @@ const EventDetailPage = () => {
                   const isFormVisible = showFeedbackForm === volunteer._id;
 
                   return (
-                    <div key={volunteer._id} className="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 rounded-2xl p-5 shadow-md hover:shadow-lg transition-all duration-300">
+                    <div key={volunteer._id} className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300">
                       <div className="flex items-start justify-between mb-4">
                         <div>
                           <h4 className="text-xl font-bold text-gray-900">{volunteer.fullName}</h4>
@@ -1646,7 +1658,7 @@ const EventDetailPage = () => {
                               setFeedbackRating(5);
                               setFeedbackComment('');
                             }}
-                            className="px-4 py-2 bg-white text-gray-700 border-2 border-gray-300 rounded-xl text-sm font-semibold hover:border-blue-500 hover:text-blue-600 shadow-md hover:shadow-lg transition-all duration-200"
+                            className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-all duration-200"
                           >
                             ⭐ Rate Volunteer
                           </button>
@@ -1658,7 +1670,7 @@ const EventDetailPage = () => {
                         <div className="mt-4 space-y-3">
                           <h4 className="text-sm font-semibold text-gray-800">Recent Feedback:</h4>
                           {ratings.slice(-2).reverse().map((rating, idx) => (
-                            <div key={idx} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div key={idx} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
                               <div className="flex items-center gap-2 mb-2">
                                 <div className="flex items-center gap-0.5">
                                   {[1, 2, 3, 4, 5].map((star) => (
@@ -1681,7 +1693,7 @@ const EventDetailPage = () => {
                       )}
 
                       {existingRating && !isFormVisible && (
-                        <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-5 shadow-sm">
+                        <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-5">
                           <p className="text-sm font-semibold text-green-800 mb-3">✓ You have already rated this volunteer for this event</p>
                           <div className="flex items-center gap-1 mb-3">
                             {[1, 2, 3, 4, 5].map((star) => (
@@ -1700,7 +1712,7 @@ const EventDetailPage = () => {
                       )}
 
                       {isFormVisible && !existingRating && (
-                        <div className="mt-4 bg-gray-50 border border-gray-300 rounded-xl p-5 shadow-lg">
+                        <div className="mt-4 bg-white border border-gray-300 rounded-xl p-5 shadow-sm">
                           <h4 className="font-bold text-gray-900 mb-4 text-lg">⭐ Rate {volunteer.fullName}</h4>
                           <div className="mb-4">
                             <label className="block text-sm font-semibold text-gray-700 mb-2">Star Rating *</label>
@@ -1731,7 +1743,7 @@ const EventDetailPage = () => {
                             <textarea
                               value={feedbackComment}
                               onChange={(e) => setFeedbackComment(e.target.value)}
-                              className="w-full border-2 border-gray-300 rounded-lg p-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all bg-white"
+                              className="w-full border-2 border-gray-300 rounded-lg p-3 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none transition-all bg-white"
                               rows="4"
                               placeholder="Share your experience working with this volunteer... (minimum 10 characters)"
                             />

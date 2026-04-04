@@ -7,7 +7,7 @@ import {
     LayoutDashboard, Users, UserCheck, Building2, ClipboardList,
     BarChart3, LogOut, Shield, ChevronRight, CheckCircle, XCircle,
     Eye, Ban, Star, Wrench, CalendarDays, AlertCircle, Bell,
-    Search, X, Activity, TrendingUp
+    Search, X, Activity, TrendingUp, Loader2
 } from 'lucide-react'
 
 /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -88,6 +88,28 @@ const AdminDashboard = () => {
             setModal(null)
             fetchData()
         } catch { showToast(`Failed to ${action} account`, 'error') }
+    }
+
+    const openRatingsModal = async (user) => {
+        setModal({ type: 'volunteer-ratings', user, isLoading: true, ratings: [] })
+        try {
+            const res = await api.get(`/admin/volunteer-ratings/${user._id}`)
+            setModal({ 
+                type: 'volunteer-ratings', 
+                user, 
+                isLoading: false,
+                ratings: res.data || []
+            })
+        } catch (error) {
+            console.error('Error fetching ratings:', error)
+            setModal({ 
+                type: 'volunteer-ratings', 
+                user, 
+                isLoading: false,
+                ratings: [],
+                error: error.response?.data?.message || 'Failed to load ratings'
+            })
+        }
     }
 
     const openOrganizerEventsModal = async (u) => {
@@ -387,7 +409,7 @@ const AdminDashboard = () => {
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
                                                 <ActionBtn icon={Wrench} label="Skills" color="violet" onClick={() => setModal({ type: 'volunteer-skills', user: u })} />
-                                                <ActionBtn icon={Star} label="Ratings" color="amber" onClick={() => setModal({ type: 'volunteer-ratings', user: u })} />
+                                                <ActionBtn icon={Star} label="Ratings" color="amber" onClick={() => openRatingsModal(u)} />
                                                 <ActionBtn icon={u.isDisabled ? UserCheck : Ban} label={u.isDisabled ? 'Enable' : 'Disable'} color={u.isDisabled ? 'green' : 'red'} onClick={() => handleToggleDisable(u._id, u.isDisabled)} />
                                             </div>
                                         </td>
@@ -546,23 +568,57 @@ const AdminDashboard = () => {
                         {modal.type === 'volunteer-ratings' && (<>
                             <ModalHeader title="Ratings" subtitle={modal.user.fullName} onClose={() => setModal(null)} />
                             <div className="p-6 max-h-80 overflow-y-auto">
-                                {modal.user.ratings?.length ? (
-                                    <div className="space-y-3">
-                                        {modal.user.ratings.map((r, i) => (
-                                            <div key={i} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                                <div className="flex items-center gap-1 mb-2">
-                                                    {[...Array(5)].map((_, s) => (
-                                                        <Star key={s} size={13} className={s < r.stars ? 'text-amber-400 fill-amber-400' : 'text-gray-300 fill-gray-200'} />
-                                                    ))}
-                                                    <span className="text-xs text-gray-400 ml-1 capitalize">by {r.role}</span>
-                                                </div>
-                                                {r.comment && <p className="text-sm text-gray-600 italic">"{r.comment}"</p>}
-                                                {r.createdAt && <p className="text-xs text-gray-400 mt-1">{new Date(r.createdAt).toLocaleDateString()}</p>}
+                                {modal.isLoading ? (
+                                    <div className="text-center py-12 flex items-center justify-center">
+                                        <div className="space-y-3">
+                                            <div className="animate-spin">
+                                                <Loader2 size={32} className="mx-auto text-blue-500" />
                                             </div>
-                                        ))}
+                                            <p className="text-gray-500 text-sm font-medium">Loading ratings...</p>
+                                        </div>
+                                    </div>
+                                ) : modal.ratings?.length ? (
+                                    <div className="space-y-3">
+                                        {modal.ratings.map((r, i) => {
+                                            const ratedByUser = r.ratedByUser?.[0]
+                                            const rating = r.ratings
+
+                                            return (
+                                                <div key={i} className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100 shadow-sm">
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div className="flex-1">
+                                                            <p className="font-semibold text-gray-900 text-sm">{r.eventTitle}</p>
+                                                            <div className="flex items-center gap-1 mt-1.5">
+                                                                {[...Array(5)].map((_, s) => (
+                                                                    <Star key={s} size={16} className={s < (rating?.rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-gray-300 fill-gray-200'} />
+                                                                ))}
+                                                                <span className="text-xs font-bold text-gray-700 ml-2">{rating?.rating || 0}/5</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {rating?.feedback && (
+                                                        <p className="text-sm text-gray-600 italic mb-2">"{rating.feedback}"</p>
+                                                    )}
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs text-blue-600 font-medium">
+                                                            By {ratedByUser?.fullName || 'Unknown'}
+                                                        </span>
+                                                        {r.completedAt && (
+                                                            <span className="text-xs text-gray-400">
+                                                                {new Date(r.completedAt).toLocaleDateString()}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
                                     </div>
                                 ) : (
-                                    <p className="text-center text-gray-400 py-8">No ratings yet.</p>
+                                    <div className="text-center py-12">
+                                        <Star size={40} className="mx-auto text-gray-300 mb-3" />
+                                        <p className="text-gray-500 font-medium text-sm">No ratings yet</p>
+                                        <p className="text-gray-400 text-xs mt-1">Ratings will appear once help requests are completed</p>
+                                    </div>
                                 )}
                             </div>
                             <ModalFooter onClose={() => setModal(null)} onAction={() => handleToggleDisable(modal.user._id, modal.user.isDisabled)} actionLabel={modal.user.isDisabled ? 'Enable Account' : 'Disable Account'} actionDanger={!modal.user.isDisabled} />

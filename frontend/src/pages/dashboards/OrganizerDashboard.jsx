@@ -3,33 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Alert from '../../components/ui/Alert';
-import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select';
-import { MessageCircle } from 'lucide-react';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const OrganizerDashboard = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const isVerified = user.isAdminVerified || false; // Backend field is isAdminVerified
-    const token = localStorage.getItem('token');
+    const { user, loading } = useAuth();
+    const safeUser = user || {};
+    const isVerified = Boolean(safeUser.isAdminVerified); // Backend field is isAdminVerified
 
-    const [showCreateEvent, setShowCreateEvent] = useState(false);
     const [events, setEvents] = useState([]);
-    const [volunteers, setVolunteers] = useState([]);
-    const [selectedSkills, setSelectedSkills] = useState([]);
-    const [formData, setFormData] = useState({
-        title: '',
-        description: '',
-        startDateTime: '',
-        endDateTime: '',
-        location: '',
-        requiredSkills: [],
-        volunteersNeeded: 0,
-        volunteerRoles: '',
-        registrationDeadline: ''
-    });
 
     useEffect(() => {
         fetchEvents();
@@ -38,89 +21,16 @@ const OrganizerDashboard = () => {
     const fetchEvents = async () => {
         try {
             const response = await api.get('/organizer/events');
-            setEvents(response.data || []);
+            const payload = response?.data;
+            const organizerEvents = Array.isArray(payload)
+                ? payload
+                : Array.isArray(payload?.events)
+                    ? payload.events
+                    : [];
+            setEvents(organizerEvents);
         } catch (error) {
             console.error('Error fetching events:', error);
-        }
-    };
-
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
-    };
-
-    const toggleSkill = async (skill) => {
-        const updatedSkills = selectedSkills.includes(skill)
-            ? selectedSkills.filter(s => s !== skill)
-            : [...selectedSkills, skill];
-        
-        setSelectedSkills(updatedSkills);
-        
-        // Auto-search when skills are selected
-        if (updatedSkills.length > 0) {
-            await searchVolunteersForSkills(updatedSkills);
-        } else {
-            setVolunteers([]);
-        }
-    };
-
-    const searchVolunteersForSkills = async (skills) => {
-        try {
-            const skillsQuery = skills.join(',');
-            const response = await api.get(`/volunteer/search?skills=${encodeURIComponent(skillsQuery)}`);
-            setVolunteers(response.data.volunteers || []);
-        } catch (error) {
-            console.error('Error searching volunteers:', error);
-        }
-    };
-
-    const commonSkills = [
-        'General Support',
-        'First Aid',
-        'Medical Assistance',
-        'Food Distribution',
-        'Logistics & Transport',
-        'Crowd Management',
-        'Teaching & Tutoring',
-        'Disaster Relief',
-        'Counseling Support',
-        'Technical Support',
-        'Translation'
-    ];
-
-    const handleCreateEvent = async (e) => {
-        e.preventDefault();
-        try {
-            const eventData = {
-                ...formData,
-                requiredSkills: selectedSkills
-            };
-
-            const response = await api.post('/organizer/event', eventData);
-
-            if (response.data) {
-                alert('Event created successfully!');
-                setShowCreateEvent(false);
-                setFormData({
-                    title: '',
-                    description: '',
-                    startDateTime: '',
-                    endDateTime: '',
-                    location: '',
-                    requiredSkills: [],
-                    volunteersNeeded: 0,
-                    volunteerRoles: '',
-                    registrationDeadline: ''
-                });
-                setSelectedSkills([]);
-                fetchEvents();
-            }
-        } catch (error) {
-            console.error('Error creating event:', error);
-            alert('Failed to create event');
+            setEvents([]);
         }
     };
 
@@ -138,6 +48,16 @@ const OrganizerDashboard = () => {
         }
     };
 
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-white p-4 sm:p-8">
+                <div className="max-w-7xl mx-auto">
+                    <p className="text-gray-700 font-medium">Loading organizer dashboard...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-white p-4 sm:p-8">
             <div className="max-w-7xl mx-auto space-y-8">
@@ -145,7 +65,7 @@ const OrganizerDashboard = () => {
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-6 animate-slideInUp">
                     <div>
                         <h1 className="text-4xl sm:text-5xl font-bold text-gray-900">Organizer Dashboard</h1>
-                        <p className="text-lg text-gray-600 mt-2 font-medium">{user.organizationName}</p>
+                        <p className="text-lg text-gray-600 mt-2 font-medium">{safeUser.organizationName || safeUser.fullName || 'Organizer'}</p>
                     </div>
                     <div className="flex gap-3">
                         {isVerified && (
@@ -172,19 +92,19 @@ const OrganizerDashboard = () => {
                         <CardBody className="space-y-4 text-sm">
                             <div>
                                 <span className="block text-gray-600 font-semibold uppercase tracking-wide">Reg. Number</span>
-                                <span className="font-bold text-gray-900 text-base">{user.registrationNumber}</span>
+                                <span className="font-bold text-gray-900 text-base">{safeUser.registrationNumber || 'N/A'}</span>
                             </div>
                             <div>
                                 <span className="block text-gray-600 font-semibold uppercase tracking-wide">Official Email</span>
-                                <span className="font-bold text-gray-900 text-base break-all">{user.officialEmail}</span>
+                                <span className="font-bold text-gray-900 text-base break-all">{safeUser.officialEmail || safeUser.email || 'N/A'}</span>
                             </div>
                             <div>
                                 <span className="block text-gray-600 font-semibold uppercase tracking-wide">Contact</span>
-                                <span className="font-bold text-gray-900 text-base">{user.contactNumber}</span>
+                                <span className="font-bold text-gray-900 text-base">{safeUser.contactNumber || 'N/A'}</span>
                             </div>
                             <div>
                                 <span className="block text-gray-600 font-semibold uppercase tracking-wide">Address</span>
-                                <span className="font-bold text-gray-900 text-base">{user.organizationAddress}</span>
+                                <span className="font-bold text-gray-900 text-base">{safeUser.organizationAddress || 'N/A'}</span>
                             </div>
                         </CardBody>
                     </Card>

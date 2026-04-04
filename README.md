@@ -1,99 +1,50 @@
-# UnityAid - Volunteer Coordination Platform
+# UnityAid
 
-A professional MERN stack web application for managing volunteer coordination, community events, and emergency support.
+UnityAid is a MERN-based volunteer coordination platform.
 
-## Features
+This workspace is now separated into dedicated projects:
 
-- **Unified Login System**: Single login page for Organizer, Volunteer, and Citizen roles
-- **Role-based Registration**: Different registration flows based on user role
-- **Professional UI**: Modern, responsive design using Tailwind CSS
-- **Form Validation**: Client-side validation for all forms
-- **Role-specific Dashboards**: Redirects users to appropriate dashboard after login
-
-## Tech Stack
-
-- **React 18** - UI library
-- **React Router v6** - Navigation and routing
-- **Tailwind CSS** - Styling
-- **Axios** - HTTP client for API calls
-- **Vite** - Build tool and dev server
-
-## Installation
-
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Start the development server:
-```bash
-npm run dev
-```
-
-3. Open your browser and navigate to `http://localhost:5173`
+- frontend application in the frontend folder
+- backend API in the backend folder
 
 ## Project Structure
 
 ```
-├── src/
-│   ├── components/
-│   │   ├── Login.jsx          # Login component with role selection
-│   │   ├── Register.jsx       # Registration component with conditional fields
-│   │   └── Dashboard.jsx      # Role-specific dashboard placeholder
-│   ├── App.jsx                # Main app component with routing
-│   ├── main.jsx               # Entry point
-│   └── index.css              # Tailwind CSS imports
-├── index.html                 # HTML template
-├── package.json               # Dependencies and scripts
-├── tailwind.config.js         # Tailwind configuration
-├── postcss.config.js          # PostCSS configuration
-└── vite.config.js            # Vite configuration
+Demo Project/
+├── backend/    # Express + MongoDB API
+├── frontend/   # React + Vite app
+└── README.md
 ```
 
-## User Roles
+## Run Frontend
 
-### Organizer
-- Can create and manage events
-- Requires admin verification before creating events
-- Access to organizer dashboard
+```
+cd frontend
+npm install
+npm run dev
+```
 
-### Volunteer
-- Can browse and sign up for events
-- Must select skills during registration
-- Access to volunteer dashboard
+Frontend runs on http://localhost:3000 by default.
 
-### Citizen
-- Can view community events
-- Can request assistance
-- Access to citizen dashboard
+## Run Backend
 
-### Admin
-- Separate login (not visible on public login page)
-- Full system access
+```
+cd backend
+npm install
+npm run dev
+```
 
-## API Endpoints (Placeholders)
+Backend runs on http://localhost:5000 by default.
 
-The application includes placeholder API calls that need to be connected to your backend:
+## Build Frontend
 
-- `POST /api/auth/login` - User login
-- `POST /api/auth/register` - User registration
-
-## Development
-
-### Available Scripts
-
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
+```
+cd frontend
+npm run build
+```
 
 ## Notes
 
-- Admin login is separate and hidden from the public login page
-- All form validations are client-side
-- Authentication tokens are stored in localStorage (replace with secure storage in production)
-- API calls are placeholders and need to be connected to your backend
-
-## License
-
-© 2024 UnityAid. All rights reserved.
+- Frontend API requests are proxied to backend via Vite config.
+- Keep all client-side code inside frontend and server-side code inside backend to avoid duplication.
 

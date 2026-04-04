@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/layouts/AuthLayout'
@@ -20,6 +20,14 @@ const Login = () => {
   const [loginError, setLoginError] = useState('')
   const navigate = useNavigate()
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+
+  useEffect(() => {
+    const disabledNotice = sessionStorage.getItem('auth_disabled_notice')
+    if (disabledNotice) {
+      setLoginError(disabledNotice)
+      sessionStorage.removeItem('auth_disabled_notice')
+    }
+  }, [])
 
   const roles = [
     { value: 'citizen', label: 'Citizen' },
@@ -92,9 +100,12 @@ const Login = () => {
       }
     } catch (error) {
       console.error('Login error:', error)
-      const errorMessage = error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Invalid credentials. Please try again.'
+      const isUnauthorized = error.response?.status === 401
+      const errorMessage = isUnauthorized
+        ? 'Invalid credentials'
+        : (error.response?.data?.message ||
+          error.response?.data?.error ||
+          'Login failed. Please try again.')
       setLoginError(errorMessage)
     } finally {
       setIsLoading(false)

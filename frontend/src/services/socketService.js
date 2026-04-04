@@ -173,6 +173,9 @@ const socketService = {
 
   onReceiveMessage(callback) {
     const s = this.getSocket()
+    if (messageListener) {
+      s.off('receiveMessage', messageListener)
+    }
     messageListener = callback
     s.on('receiveMessage', callback)
   },
