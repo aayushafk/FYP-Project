@@ -548,8 +548,33 @@ router.get('/my-events', async (req, res) => {
 });
 
 // Helper function to validate if a volunteer can join an event
+const normalizeSkill = (skill = '') => (
+    typeof skill === 'string' ? skill.trim().toLowerCase() : ''
+);
+
+const normalizeSkillList = (skills = []) => (
+    Array.isArray(skills)
+        ? skills.filter((skill) => typeof skill === 'string' && skill.trim().length > 0).map((skill) => skill.trim())
+        : []
+);
+
+const hasGeneralSupportSkill = (skills = []) => (
+    normalizeSkillList(skills).some((skill) => normalizeSkill(skill) === 'general support')
+);
+
+const getMatchedSkills = (requiredSkills = [], volunteerSkills = []) => {
+    const normalizedVolunteerSkills = new Set(normalizeSkillList(volunteerSkills).map(normalizeSkill));
+
+    return normalizeSkillList(requiredSkills).filter(
+        (requiredSkill) => normalizedVolunteerSkills.has(normalizeSkill(requiredSkill))
+    );
+};
+
 const validateEventJoin = (event, volunteer) => {
-    if (!event.requiredSkills || event.requiredSkills.length === 0) {
+    const requiredSkills = normalizeSkillList(event.requiredSkills);
+    const volunteerSkills = normalizeSkillList(volunteer.skills);
+
+    if (requiredSkills.length === 0) {
         return {
             canJoin: true,
             message: 'This event has no specific skill requirements',
@@ -560,7 +585,10 @@ const validateEventJoin = (event, volunteer) => {
     }
 
     // If "General Support" is in required skills, anyone can join
-    if (event.requiredSkills.includes('General Support')) {
+    const eventHasGeneralSupport = hasGeneralSupportSkill(requiredSkills);
+    const volunteerHasGeneralSupport = hasGeneralSupportSkill(volunteerSkills);
+
+    if (eventHasGeneralSupport || volunteerHasGeneralSupport) {
         return {
             canJoin: true,
             message: 'This event is open to all volunteers (General Support)',
@@ -571,32 +599,30 @@ const validateEventJoin = (event, volunteer) => {
     }
 
     // Check for skill matches
-    const matchedSkills = volunteer.skills.filter(skill =>
-        event.requiredSkills.includes(skill)
-    );
+    const matchedSkills = getMatchedSkills(requiredSkills, volunteerSkills);
 
-    const skillMatch = event.requiredSkills.length > 0
-        ? Math.round((matchedSkills.length / event.requiredSkills.length) * 100)
+    const skillMatch = requiredSkills.length > 0
+        ? Math.round((matchedSkills.length / requiredSkills.length) * 100)
         : 0;
 
     if (matchedSkills.length > 0) {
         return {
             canJoin: true,
-            message: `You have ${matchedSkills.length} of ${event.requiredSkills.length} required skills`,
+            message: `You have ${matchedSkills.length} of ${requiredSkills.length} required skills`,
             skillMatch,
             isOpenToAll: false,
             matchedSkills,
-            skillGap: event.requiredSkills.filter(skill => !matchedSkills.includes(skill))
+            skillGap: requiredSkills.filter(skill => !matchedSkills.includes(skill))
         };
     }
 
     return {
         canJoin: false,
-        message: `You don't have the required skills for this event. Required: ${event.requiredSkills.join(', ')}`,
+        message: `You don't have the required skills for this event. Required: ${requiredSkills.join(', ')}`,
         skillMatch: 0,
         isOpenToAll: false,
         matchedSkills: [],
-        skillGap: event.requiredSkills
+        skillGap: requiredSkills
     };
 };
 
@@ -618,14 +644,18 @@ router.post('/join-event/:eventId', async (req, res) => {
 
         // Skill validation - but allow if no skills required (General Support)
         if (event.requiredSkills && event.requiredSkills.length > 0) {
-            const hasGeneralSupport = event.requiredSkills.includes('General Support');
-            const hasMatchingSkill = volunteer.skills && volunteer.skills.some(skill => event.requiredSkills.includes(skill));
+            const requiredSkills = normalizeSkillList(event.requiredSkills);
+            const volunteerSkills = normalizeSkillList(volunteer.skills);
+
+            const hasGeneralSupport = hasGeneralSupportSkill(requiredSkills);
+            const volunteerHasGeneralSupport = hasGeneralSupportSkill(volunteerSkills);
+            const hasMatchingSkill = getMatchedSkills(requiredSkills, volunteerSkills).length > 0;
             
-            if (!hasGeneralSupport && !hasMatchingSkill) {
+            if (!hasGeneralSupport && !volunteerHasGeneralSupport && !hasMatchingSkill) {
                 return res.status(400).json({ 
                     message: 'You do not have the required skills for this event',
-                    requiredSkills: event.requiredSkills,
-                    yourSkills: volunteer.skills || []
+                    requiredSkills,
+                    yourSkills: volunteerSkills
                 });
             }
         }

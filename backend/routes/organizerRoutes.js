@@ -53,12 +53,20 @@ router.post('/event', isVerified, async (req, res) => {
         console.log('endDateTime:', req.body.endDateTime);
         console.log('location:', req.body.location);
 
+        const normalizedRequiredSkills = Array.isArray(req.body.requiredSkills)
+            ? [...new Set(
+                req.body.requiredSkills
+                    .filter((skill) => typeof skill === 'string' && skill.trim().length > 0)
+                    .map((skill) => skill.trim())
+            )]
+            : [];
+
         // Validate required skills if provided
-        if (req.body.requiredSkills && Array.isArray(req.body.requiredSkills)) {
-            if (req.body.requiredSkills.length > 0 && !validateSkills(req.body.requiredSkills, 'volunteer')) {
+        if (normalizedRequiredSkills.length > 0) {
+            if (!validateSkills(normalizedRequiredSkills, 'volunteer')) {
                 return res.status(400).json({ 
                     message: 'Some skills are invalid',
-                    providedSkills: req.body.requiredSkills
+                    providedSkills: normalizedRequiredSkills
                 });
             }
         }
@@ -73,7 +81,7 @@ router.post('/event', isVerified, async (req, res) => {
             organizer: req.user._id,
             createdBy: req.user._id,
             contactInfo: req.body.contactInfo || '',
-            requiredSkills: req.body.requiredSkills || [],
+            requiredSkills: normalizedRequiredSkills,
             volunteersNeeded: req.body.volunteersNeeded || 0
         };
 
@@ -105,24 +113,21 @@ router.post('/event', isVerified, async (req, res) => {
             console.error('Error notifying citizens:', citizenNotifyError);
         }
 
-        // Send skill-based notifications to volunteers
-        if (savedEvent.requiredSkills && savedEvent.requiredSkills.length > 0) {
-            try {
-                const notifications = await notifyVolunteersBySkills(savedEvent);
-                return res.status(201).json({
-                    event: savedEvent,
-                    notificationsSent: notifications.length,
-                    message: `Event created and ${notifications.length} volunteers notified based on skills`
-                });
-            } catch (notificationError) {
-                console.error('Error sending notifications:', notificationError);
-                return res.status(201).json({
-                    event: savedEvent,
-                    message: 'Event created but skill notifications could not be sent'
-                });
-            }
-        } else {
-            return res.status(201).json({ event: savedEvent });
+        // Send notifications to volunteers.
+        // If requiredSkills is empty, service falls back to notifying all available volunteers for organizer events.
+        try {
+            const notifications = await notifyVolunteersBySkills(savedEvent);
+            return res.status(201).json({
+                event: savedEvent,
+                notificationsSent: notifications.length,
+                message: `Event created and ${notifications.length} volunteers notified`
+            });
+        } catch (notificationError) {
+            console.error('Error sending notifications:', notificationError);
+            return res.status(201).json({
+                event: savedEvent,
+                message: 'Event created but notifications could not be sent'
+            });
         }
     } catch (error) {
         console.error('Error creating event:', error);
