@@ -11,6 +11,7 @@ const VolunteerDashboard = () => {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState([]);
     const [availableHelpRequests, setAvailableHelpRequests] = useState([]);
+    const [availableOrganizerEvents, setAvailableOrganizerEvents] = useState([]);
     const [acceptedHelpRequests, setAcceptedHelpRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [deletingId, setDeletingId] = useState(null);
@@ -19,6 +20,10 @@ const VolunteerDashboard = () => {
     const [selectedEvent, setSelectedEvent] = useState(null);
 
     useEffect(() => {
+        if (!user?._id) {
+            return;
+        }
+
         fetchNotifications();
         const  interval = setInterval(fetchNotifications, 30000);
         
@@ -34,7 +39,7 @@ const VolunteerDashboard = () => {
             clearInterval(interval);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, []);
+    }, [user?._id]);
 
     const fetchNotifications = async () => {
         let eventNotifications = [];
@@ -62,8 +67,10 @@ const VolunteerDashboard = () => {
     const fetchAvailableHelpRequests = async () => {
         try {
             const response = await api.get('/volunteer/available-events');
+            const allEvents = response.data.events || [];
+
             // Show citizen requests that are still active and not full.
-            const helpRequests = (response.data.events || []).filter((event) => {
+            const helpRequests = allEvents.filter((event) => {
                 if (event.type !== 'citizen') return false;
                 if (event.trackingStatus === 'Completed') return false;
 
@@ -76,20 +83,29 @@ const VolunteerDashboard = () => {
 
                 return true;
             });
+
+            // Show organizer-created events that volunteers can join.
+            const organizerEvents = allEvents.filter((event) => event.type === 'organizer');
+
             setAvailableHelpRequests(helpRequests);
+            setAvailableOrganizerEvents(organizerEvents);
         } catch (error) {
             console.error('Error fetching available help requests:', error);
+            setAvailableOrganizerEvents([]);
         }
     };
 
     const fetchAcceptedHelpRequests = async () => {
         try {
+            if (!user?._id) {
+                setAcceptedHelpRequests([]);
+                return;
+            }
+
             const response = await api.get('/volunteer/my-events');
             const events = response.data?.events || [];
 
             const acceptedRequests = events.filter((event) => {
-                if (event.type !== 'citizen') return false;
-
                 const assignments = Array.isArray(event.volunteerAssignments)
                     ? event.volunteerAssignments
                     : [];
@@ -456,12 +472,12 @@ const VolunteerDashboard = () => {
                         <div className="mb-8">
                             <div className="flex items-center gap-3 mb-2">
                                 <span className="text-3xl">✅</span>
-                                <h2 className="text-3xl font-bold text-gray-900">Your Help Request History</h2>
+                                <h2 className="text-3xl font-bold text-gray-900">Your Participated Events</h2>
                                 <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold text-lg border-2 border-green-300">
                                     {acceptedHelpRequests.length}
                                 </span>
                             </div>
-                            <p className="text-lg text-gray-600 font-medium ml-9">Active and previous requests you accepted</p>
+                            <p className="text-lg text-gray-600 font-medium ml-9">Events and requests you have accepted</p>
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -474,6 +490,9 @@ const VolunteerDashboard = () => {
                                     <div className="mb-3 flex items-center gap-2">
                                         <span className="inline-flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase">
                                             Accepted
+                                        </span>
+                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white border border-gray-300 text-gray-700 uppercase">
+                                            {request.type === 'citizen' ? 'Help Request' : 'Organizer Event'}
                                         </span>
                                         {request.trackingStatus && (
                                             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white border border-gray-300 text-gray-700 uppercase">
@@ -608,6 +627,104 @@ const VolunteerDashboard = () => {
                                         >
                                             <span className="flex items-center justify-center gap-2">
                                                 View & Respond
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {availableOrganizerEvents.length > 0 && (
+                    <div className="mt-12 animate-slideInRight">
+                        <div className="mb-8">
+                            <div className="flex items-center gap-3 mb-2">
+                                <span className="text-3xl">📅</span>
+                                <h2 className="text-3xl font-bold text-gray-900">Organizer Events</h2>
+                                <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-4 py-2 rounded-full font-bold text-lg border-2 border-blue-300">
+                                    {availableOrganizerEvents.length}
+                                </span>
+                            </div>
+                            <p className="text-lg text-gray-600 font-medium ml-9">Community events currently open for volunteers</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {availableOrganizerEvents.map((event, index) => (
+                                <div
+                                    key={event._id}
+                                    className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-6 group animate-slideInUp"
+                                    style={{ animationDelay: `${index * 0.05}s` }}
+                                >
+                                    {event.hasGeneralSupport && (
+                                        <div className="mb-3">
+                                            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 uppercase">
+                                                Open to all volunteers
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    <h3 className="text-xl font-bold text-gray-900 mb-4 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                                        {event.title}
+                                    </h3>
+
+                                    <div className="space-y-3 mb-6">
+                                        {event.startDateTime && (
+                                            <div className="flex items-center gap-3">
+                                                <Calendar size={18} className="text-blue-600 flex-shrink-0" />
+                                                <span className="text-gray-700 font-medium">
+                                                    {new Date(event.startDateTime).toLocaleDateString('en-US', {
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                        year: 'numeric'
+                                                    })}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {event.location && (
+                                            <div className="flex items-center gap-3">
+                                                <MapPin size={18} className="text-red-500 flex-shrink-0" />
+                                                <span className="text-gray-700 font-medium">{event.location}</span>
+                                            </div>
+                                        )}
+
+                                        {event.createdBy && (
+                                            <div className="flex items-center gap-3">
+                                                <Users size={18} className="text-indigo-500 flex-shrink-0" />
+                                                <span className="text-gray-700 font-medium">
+                                                    Organized by {event.createdBy.fullName || 'Organizer'}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {event.matchingSkills && event.matchingSkills.length > 0 && (
+                                        <div className="mb-6 pb-6 border-t border-gray-200 pt-4">
+                                            <p className="text-xs text-gray-600 font-semibold mb-3 uppercase tracking-wide">Your Matching Skills</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {event.matchingSkills.map(skill => (
+                                                    <span
+                                                        key={skill}
+                                                        className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-medium border border-green-300"
+                                                    >
+                                                        ✓ {skill}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3 pt-4 border-t border-gray-200">
+                                        <button
+                                            onClick={() => navigate(`/event/${event._id}`)}
+                                            className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:from-blue-700 hover:to-indigo-700 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-base shadow-sm"
+                                        >
+                                            <span className="flex items-center justify-center gap-2">
+                                                View Event
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                                                 </svg>

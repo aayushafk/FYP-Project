@@ -36,36 +36,53 @@ const HelpRequestDetail = () => {
   const normalizeMessage = (message = {}) => {
     const senderId = message.senderId || message.sender?.id || message.sender?._id || message.sender;
     const senderName = message.senderName || message.sender?.name || message.sender?.fullName || 'Unknown';
+    const rawImage = message.image || message.imageUrl || message.imageData?.url || message.imageData?.path || null;
+    const rawMessage = (message.message || message.content || '').toString();
+    const isImageOnlyPlaceholder = Boolean(rawImage) && /^(?:📷\s*)?(?:image|shared image)$/i.test(rawMessage.trim());
 
     return {
       _id: message._id,
       senderId: senderId ? senderId.toString() : '',
       senderName,
-      message: message.message || message.content || '',
-      image: message.image || null,
-      location: message.location || null,
+      message: isImageOnlyPlaceholder ? '' : rawMessage,
+      image: rawImage,
+      location: message.location || message.locationData || null,
       timestamp: message.timestamp || message.createdAt || new Date().toISOString()
     };
   };
 
   const resolveImageUrl = (imagePath) => {
-    if (!imagePath) return '';
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath;
+    if (!imagePath || typeof imagePath !== 'string') return '';
+
+    const trimmed = imagePath.trim();
+    if (!trimmed) return '';
+
+    if (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('data:') ||
+      trimmed.startsWith('blob:')
+    ) {
+      return trimmed;
     }
 
     const apiOrigin = API_BASE_URL.replace(/\/api\/?$/, '');
-    const normalizedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+    const normalizedPath = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/');
+    const pathWithSlash = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
 
-    if (normalizedPath.startsWith('/api/')) {
-      return `${apiOrigin}${normalizedPath}`;
+    if (pathWithSlash.startsWith('/api/')) {
+      return `${apiOrigin}${pathWithSlash}`;
     }
 
-    if (normalizedPath.startsWith('/uploads/')) {
-      return `${apiOrigin}/api${normalizedPath}`;
+    if (pathWithSlash.startsWith('/uploads/')) {
+      return `${apiOrigin}/api${pathWithSlash}`;
     }
 
-    return `${API_BASE_URL}${normalizedPath}`;
+    if (pathWithSlash.startsWith('/api/uploads/')) {
+      return `${apiOrigin}${pathWithSlash}`;
+    }
+
+    return `${API_BASE_URL}/${normalizedPath.replace(/^\/+/, '')}`;
   };
 
   const getLocationMapUrl = (locationData) => {
@@ -792,8 +809,18 @@ const HelpRequestDetail = () => {
                                 alt="Shared image"
                                 className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                                 onClick={() => window.open(resolveImageUrl(msg.image), '_blank')}
+                                onError={(event) => {
+                                  event.currentTarget.style.display = 'none';
+                                  const fallback = event.currentTarget.nextElementSibling;
+                                  if (fallback) {
+                                    fallback.classList.remove('hidden');
+                                  }
+                                }}
                                 style={{ maxHeight: '300px' }}
                               />
+                              <div className="hidden text-xs px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800">
+                                Image unavailable (file not found on server).
+                              </div>
                             </div>
                           )}
 

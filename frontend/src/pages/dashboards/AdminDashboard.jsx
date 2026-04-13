@@ -475,7 +475,7 @@ const AdminDashboard = () => {
                                     <table className="min-w-full">
                                         <thead>
                                             <tr className="bg-gray-50 border-b border-gray-100">
-                                                {['Organization', 'Contact', 'Email', 'Reg Number', 'Applied', 'Actions'].map(col => (
+                                                {['Organization', 'Contact', 'Email', 'Reg Number', 'Applied', 'Status', 'Actions'].map(col => (
                                                     <th key={col} className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{col}</th>
                                                 ))}
                                             </tr>
@@ -496,18 +496,32 @@ const AdminDashboard = () => {
                                                     <td className="px-6 py-4 text-sm text-gray-500">{org.registrationNumber || 'â€”'}</td>
                                                     <td className="px-6 py-4 text-sm text-gray-500">{new Date(org.createdAt).toLocaleDateString()}</td>
                                                     <td className="px-6 py-4">
+                                                        {org.isDisabled ? (
+                                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 ring-1 ring-red-200">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                                                Rejected
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                                                Pending
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4">
                                                         <div className="flex items-center gap-2">
                                                             <button
                                                                 onClick={() => handleVerify(org._id)}
                                                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-all shadow-sm"
                                                             >
-                                                                <CheckCircle size={13} />Approve
+                                                                <CheckCircle size={13} />{org.isDisabled ? 'Approve Again' : 'Approve'}
                                                             </button>
                                                             <button
                                                                 onClick={() => handleReject(org._id)}
-                                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg transition-all border border-red-200"
+                                                                disabled={org.isDisabled}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg transition-all border border-red-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-50"
                                                             >
-                                                                <XCircle size={13} />Reject
+                                                                <XCircle size={13} />{org.isDisabled ? 'Rejected' : 'Reject'}
                                                             </button>
                                                         </div>
                                                     </td>

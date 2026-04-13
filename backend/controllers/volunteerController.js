@@ -21,43 +21,13 @@ const emitVolunteerStatusUpdate = ({ eventId, volunteerId, volunteerName, fromSt
   });
 };
 
-const normalizeSkill = (skill = '') => (
-  typeof skill === 'string' ? skill.trim().toLowerCase() : ''
-);
-
-const normalizeSkillList = (skills = []) => (
-  Array.isArray(skills)
-    ? skills.filter((skill) => typeof skill === 'string' && skill.trim().length > 0).map((skill) => skill.trim())
-    : []
-);
-
-const hasGeneralSupportSkill = (skills = []) => (
-  normalizeSkillList(skills).some((skill) => normalizeSkill(skill) === 'general support')
-);
-
-const getMatchedRequiredSkills = (requiredSkills = [], volunteerSkills = []) => {
-  const normalizedVolunteerSkills = new Set(
-    normalizeSkillList(volunteerSkills).map(normalizeSkill)
-  );
-
-  return normalizeSkillList(requiredSkills).filter(
-    (requiredSkill) => normalizedVolunteerSkills.has(normalizeSkill(requiredSkill))
-  );
-};
-
 /**
  * Get all available events/requests for volunteers (skill-matched)
  */
 export const getAvailableEvents = async (req, res) => {
   try {
     const volunteer = await User.findById(req.user._id);
-    
-    if (!volunteer || !volunteer.skills || volunteer.skills.length === 0) {
-      return res.json({ events: [], message: 'No skills added yet. Please add your skills to see matching events.' });
-    }
-
-    const volunteerSkills = normalizeSkillList(volunteer.skills);
-    const volunteerHasGeneralSupport = hasGeneralSupportSkill(volunteerSkills);
+    const volunteerSkills = Array.isArray(volunteer?.skills) ? volunteer.skills : [];
 
     // Get all events (both organizer and citizen types)
     const allEvents = await Event.find({
@@ -71,30 +41,25 @@ export const getAvailableEvents = async (req, res) => {
     // Filter and match events based on volunteer's skills OR "General Support"
     const matchedEvents = allEvents
       .map(event => {
-        const requiredSkills = normalizeSkillList(event.requiredSkills);
+        const requiredSkills = Array.isArray(event.requiredSkills) ? event.requiredSkills.filter(Boolean) : [];
 
         // Check if event has "General Support" in required skills
-        const hasGeneralSupport = hasGeneralSupportSkill(requiredSkills);
+        const hasGeneralSupport = requiredSkills.includes('General Support');
         
         // Check if volunteer's skills match event's required skills
-        const matchingSkills = getMatchedRequiredSkills(requiredSkills, volunteerSkills);
+        const matchingSkills = hasGeneralSupport
+          ? ['General Support']
+          : requiredSkills.filter(skill => volunteerSkills.includes(skill));
         
-        // Event is matched if:
-        // - organizer marked event as General Support, OR
-        // - volunteer has General Support in profile, OR
-        // - volunteer has any matching required skill.
-        const isMatched = hasGeneralSupport || volunteerHasGeneralSupport || matchingSkills.length > 0;
-        const displayMatchingSkills = matchingSkills.length > 0
-          ? matchingSkills
-          : ((hasGeneralSupport || volunteerHasGeneralSupport) ? ['General Support'] : []);
+        // Event is matched if: has General Support OR has matching skills
+        const isMatched = hasGeneralSupport || matchingSkills.length > 0;
         
         return {
           ...event.toObject(),
-          matchingSkills: displayMatchingSkills,
-          matchCount: displayMatchingSkills.length,
+          matchingSkills,
+          matchCount: hasGeneralSupport ? 1 : matchingSkills.length,
           isMatched: isMatched,
-          hasGeneralSupport: hasGeneralSupport,
-          volunteerHasGeneralSupport
+          hasGeneralSupport: hasGeneralSupport
         };
       })
       .filter(event => {
@@ -160,28 +125,6 @@ export const acceptEvent = async (req, res) => {
     const existingAssignmentIndex = event.volunteerAssignments.findIndex(
       a => a.volunteerId.toString() === req.user._id.toString()
     );
-
-    const existingAssignment = existingAssignmentIndex !== -1
-      ? event.volunteerAssignments[existingAssignmentIndex]
-      : null;
-
-    // Enforce skill filter for new acceptance or re-acceptance.
-    if (event.requiredSkills && event.requiredSkills.length > 0 && existingAssignment?.participationStatus !== 'Accepted') {
-      const requiredSkills = normalizeSkillList(event.requiredSkills);
-      const volunteerSkills = normalizeSkillList(req.user.skills || []);
-
-      const eventHasGeneralSupport = hasGeneralSupportSkill(requiredSkills);
-      const volunteerHasGeneralSupport = hasGeneralSupportSkill(volunteerSkills);
-      const matchingSkills = getMatchedRequiredSkills(requiredSkills, volunteerSkills);
-
-      if (!eventHasGeneralSupport && !volunteerHasGeneralSupport && matchingSkills.length === 0) {
-        return res.status(400).json({
-          message: 'You do not have the required skills for this event',
-          requiredSkills,
-          yourSkills: volunteerSkills
-        });
-      }
-    }
 
     let previousAssignmentStatus = 'Pending';
 

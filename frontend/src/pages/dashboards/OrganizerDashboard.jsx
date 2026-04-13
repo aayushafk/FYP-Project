@@ -177,22 +177,20 @@ const OrganizerDashboard = () => {
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <div className="flex gap-2">
-                                                            <Button 
-                                                                variant="outline" 
-                                                                size="sm"
+                                                            <button
+                                                                type="button"
                                                                 onClick={() => navigate(`/event/${event._id}`)}
-                                                                className="hover:-translate-y-0.5"
+                                                                className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium transition-none hover:bg-white hover:text-slate-700 hover:border-slate-300"
                                                             >
                                                                 View
-                                                            </Button>
-                                                            <Button 
-                                                                variant="outline" 
-                                                                size="sm"
-                                                                className="text-red-600 hover:bg-red-50 border-red-200 hover:border-red-400 hover:-translate-y-0.5"
+                                                            </button>
+                                                            <button
+                                                                type="button"
                                                                 onClick={() => handleDeleteEvent(event._id)}
+                                                                className="px-4 py-2 rounded-lg border border-red-200 bg-white text-red-600 text-sm font-medium transition-none hover:bg-white hover:text-red-600 hover:border-red-200"
                                                             >
                                                                 Delete
-                                                            </Button>
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>

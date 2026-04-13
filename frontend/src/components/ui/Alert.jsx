@@ -1,4 +1,26 @@
-import React from 'react';
+import React from 'react'
+import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from 'lucide-react'
+
+const cx = (...classes) => classes.filter(Boolean).join(' ')
+
+const VARIANTS = {
+    info: {
+        container: 'border-blue-200 bg-blue-50/80 text-blue-800',
+        icon: Info
+    },
+    success: {
+        container: 'border-emerald-200 bg-emerald-50/80 text-emerald-800',
+        icon: CheckCircle2
+    },
+    warning: {
+        container: 'border-amber-200 bg-amber-50/85 text-amber-900',
+        icon: TriangleAlert
+    },
+    error: {
+        container: 'border-red-200 bg-red-50/85 text-red-800',
+        icon: AlertCircle
+    }
+}
 
 const Alert = ({
     children,
@@ -8,35 +30,33 @@ const Alert = ({
     dismissible = false,
     onClose
 }) => {
-    const variants = {
-        info: 'bg-blue-50 text-blue-800 border-blue-200',
-        success: 'bg-green-50 text-green-800 border-green-200',
-        warning: 'bg-amber-50 text-amber-800 border-amber-200',
-        error: 'bg-red-50 text-red-800 border-red-200',
-    };
-
-    const style = variants[variant] || variants.info;
+    const resolvedVariant = VARIANTS[variant] || VARIANTS.info
+    const Icon = resolvedVariant.icon
 
     return (
-        <div className={`p-4 rounded-lg border flex justify-between items-start ${style} ${className}`} role="alert">
-            <div className="flex-grow">
-                {title && <h3 className="font-semibold mb-1">{title}</h3>}
-                <div className="text-sm">
-                    {children}
-                </div>
+        <div
+            className={cx('flex items-start gap-3 rounded-xl border px-4 py-3.5 shadow-sm', resolvedVariant.container, className)}
+            role="alert"
+        >
+            <Icon size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+
+            <div className="min-w-0 flex-1">
+                {title && <h3 className="mb-1 text-sm font-bold">{title}</h3>}
+                <div className="text-sm leading-relaxed">{children}</div>
             </div>
+
             {dismissible && (
                 <button
                     type="button"
                     onClick={onClose}
-                    className="ml-4 inline-flex text-gray-400 hover:text-gray-500 focus:outline-none"
-                    aria-label="Close"
+                    className="shrink-0 rounded-lg p-1 text-current/70 transition hover:bg-black/5 hover:text-current"
+                    aria-label="Close alert"
                 >
-                    <span className="text-xl font-medium leading-none">&times;</span>
+                    <X size={16} />
                 </button>
             )}
         </div>
-    );
-};
+    )
+}
 
-export default Alert;
+export default Alert

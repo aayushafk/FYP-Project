@@ -10,28 +10,6 @@ const average = (values = []) => {
     return values.reduce((sum, current) => sum + current, 0) / values.length;
 };
 
-const normalizeSkill = (skill = '') => (
-    typeof skill === 'string' ? skill.trim().toLowerCase() : ''
-);
-
-const normalizeSkillList = (skills = []) => (
-    Array.isArray(skills)
-        ? skills.filter((skill) => typeof skill === 'string' && skill.trim().length > 0).map((skill) => skill.trim())
-        : []
-);
-
-const hasGeneralSupportSkill = (skills = []) => (
-    normalizeSkillList(skills).some((skill) => normalizeSkill(skill) === 'general support')
-);
-
-const getMatchedSkills = (requiredSkills = [], volunteerSkills = []) => {
-    const normalizedVolunteerSkills = new Set(normalizeSkillList(volunteerSkills).map(normalizeSkill));
-
-    return normalizeSkillList(requiredSkills).filter(
-        (requiredSkill) => normalizedVolunteerSkills.has(normalizeSkill(requiredSkill))
-    );
-};
-
 const buildRecommendationWeights = (includeAvailability = true) => ({
     skillMatch: 0.55,
     rating: 0.20,
@@ -219,42 +197,48 @@ export const notifyVolunteersBySkills = async (event, options = {}) => {
     try {
         const { restrictToVolunteerIds = null } = options;
         let matchedVolunteers;
-        const requiredSkills = normalizeSkillList(event.requiredSkills || []);
-        const hasGeneralSupport = hasGeneralSupportSkill(requiredSkills);
         const availableVolunteerQuery = {
             role: 'volunteer',
-            isDisabled: { $ne: true }
+            isDisabled: { $ne: true },
+            isVerified: true
         };
-
-        if (Array.isArray(restrictToVolunteerIds) && restrictToVolunteerIds.length > 0) {
-            availableVolunteerQuery._id = { $in: restrictToVolunteerIds };
-        }
+        const requiredSkills = Array.isArray(event.requiredSkills)
+            ? event.requiredSkills.filter(Boolean)
+            : [];
+        const hasGeneralSupport = requiredSkills.includes('General Support');
         
         // Check if this is an EMERGENCY help request
         if (event.type === 'citizen' && event.isEmergency) {
             // EMERGENCY: Notify all available volunteers regardless of skills.
             matchedVolunteers = await User.find(availableVolunteerQuery);
             console.log(`🚨 EMERGENCY request - notifying ALL available ${matchedVolunteers.length} volunteers`);
-        } else if (requiredSkills.length === 0) {
-            // Organizer events without specific skills should still reach volunteers.
-            if (event.type === 'organizer') {
-                matchedVolunteers = await User.find(availableVolunteerQuery);
-                console.log(`Organizer event without required skills - notifying ALL available ${matchedVolunteers.length} volunteers`);
-            } else {
-                // No skills specified and not emergency - don't notify anyone.
-                console.log('No required skills specified and not emergency - no notifications');
-                return [];
-            }
         } else if (hasGeneralSupport) {
-            // Organizer selected General Support, so notify all available volunteers.
-            matchedVolunteers = await User.find(availableVolunteerQuery);
-            console.log(`General Support selected - notifying ALL available ${matchedVolunteers.length} volunteers`);
+            // GENERAL SUPPORT: Notify every available volunteer because the event is open to all.
+            const volunteerQuery = { ...availableVolunteerQuery };
+
+            if (Array.isArray(restrictToVolunteerIds) && restrictToVolunteerIds.length > 0) {
+                volunteerQuery._id = { $in: restrictToVolunteerIds };
+            }
+
+            matchedVolunteers = await User.find(volunteerQuery);
+            console.log(`🌍 General Support event - notifying ALL available ${matchedVolunteers.length} volunteers`);
+        } else if (requiredSkills.length === 0) {
+            // No skills specified and not emergency - don't notify anyone
+            console.log('No required skills specified and not emergency - no notifications');
+            return [];
         } else {
-            // NORMAL: Match required skills with case/whitespace tolerance.
-            const availableVolunteers = await User.find(availableVolunteerQuery);
-            matchedVolunteers = availableVolunteers.filter((volunteer) => (
-                getMatchedSkills(requiredSkills, volunteer.skills || []).length > 0
-            ));
+            // NORMAL: Find volunteers with matching skills ONLY
+            // Only notify volunteers who have at least one of the required skills
+            const volunteerQuery = {
+                ...availableVolunteerQuery,
+                skills: { $in: requiredSkills }
+            };
+
+            if (Array.isArray(restrictToVolunteerIds) && restrictToVolunteerIds.length > 0) {
+                volunteerQuery._id = { $in: restrictToVolunteerIds };
+            }
+
+            matchedVolunteers = await User.find(volunteerQuery);
             console.log(`Found ${matchedVolunteers.length} volunteers with matching skills:`, requiredSkills);
         }
 
@@ -266,7 +250,7 @@ export const notifyVolunteersBySkills = async (event, options = {}) => {
         // Create notifications for each matched volunteer
         const notifications = await Promise.all(
             matchedVolunteers.map(volunteer => {
-                let matchedSkills = getMatchedSkills(requiredSkills, volunteer.skills || []);
+                let matchedSkills;
                 let notificationMessage;
                 let notificationType;
                 
@@ -277,25 +261,32 @@ export const notifyVolunteersBySkills = async (event, options = {}) => {
                     notificationMessage = `🚨 EMERGENCY Help Request: "${event.title}" - Priority HIGH. Urgent assistance needed! Immediate action required.`;
                     // Show which skills match (if any)
                     if (requiredSkills.length > 0) {
-                        matchedSkills = getMatchedSkills(requiredSkills, volunteer.skills || []);
+                        matchedSkills = (volunteer.skills || []).filter(skill =>
+                            requiredSkills.includes(skill)
+                        );
                         if (matchedSkills.length === 0) {
                             matchedSkills = ['Emergency Response'];
                         }
                     } else {
                         matchedSkills = ['Emergency Response'];
                     }
+                } else if (hasGeneralSupport) {
+                    // GENERAL SUPPORT event - everyone can participate
+                    matchedSkills = ['General Support'];
+                    notificationType = 'skill_matched_event';
+                    notificationMessage = `🌍 Open Volunteer Opportunity! "${event.title}" is open to all volunteers. Can you help?`;
                 } else if (event.type === 'citizen') {
                     // NORMAL citizen help request - skill-matched volunteers only
-                    if (hasGeneralSupport && matchedSkills.length === 0) {
-                        matchedSkills = ['General Support'];
-                    }
+                    matchedSkills = (volunteer.skills || []).filter(skill =>
+                        requiredSkills.includes(skill)
+                    );
                     notificationType = 'skill_matched_event';
                     notificationMessage = `🆘 Help Request: "${event.title}" - Your skills are needed: ${matchedSkills.join(', ')}. Can you help?`;
                 } else {
                     // Organizer event
-                    if ((hasGeneralSupport || requiredSkills.length === 0) && matchedSkills.length === 0) {
-                        matchedSkills = ['General Support'];
-                    }
+                    matchedSkills = (volunteer.skills || []).filter(skill =>
+                        requiredSkills.includes(skill)
+                    );
                     notificationType = 'skill_matched_event';
                     notificationMessage = `🎯 New Event Opportunity! "${event.title}" is looking for volunteers with your skills: ${matchedSkills.join(', ')}. Will you participate?`;
                 }
@@ -336,7 +327,7 @@ export const notifyVolunteersByRequestSkills = async (request) => {
         const matchedVolunteers = await User.find({
             role: 'volunteer',
             skills: { $in: request.requiredSkills },
-            isDisabled: { $ne: true }
+            isVerified: true // Only notify verified volunteers
         });
 
         if (matchedVolunteers.length === 0) {
@@ -382,44 +373,43 @@ export const getSkillMatchedEvents = async (volunteerId, filters = {}) => {
             throw new Error('Volunteer not found');
         }
 
-        if (!volunteer.skills || volunteer.skills.length === 0) {
-            return {
-                volunteer: volunteer.fullName,
-                volunteerSkills: [],
-                totalMatches: 0,
-                events: []
-            };
-        }
+        const volunteerSkills = Array.isArray(volunteer.skills) ? volunteer.skills : [];
+        const statusFilter = filters.status || 'upcoming';
 
-        // Build query for matching events
-        let query = {
-            requiredSkills: { $in: volunteer.skills },
-            status: filters.status || 'upcoming'
-        };
-
-        // Get matching events
-        const events = await Event.find(query)
+        const events = await Event.find({ status: statusFilter })
             .populate('organizer', 'fullName email organizationName')
             .sort({ startDateTime: 1 })
             .limit(filters.limit || 50)
             .skip(filters.offset || 0);
 
-        // Add match details
-        const eventsWithMatches = events.map(event => {
-            const matchedSkills = volunteer.skills.filter(skill =>
-                event.requiredSkills.includes(skill)
-            );
-            return {
-                ...event.toObject(),
-                matchedSkills,
-                matchCount: matchedSkills.length,
-                matchPercentage: Math.round((matchedSkills.length / event.requiredSkills.length) * 100)
-            };
-        }).sort((a, b) => b.matchCount - a.matchCount);
+        const eventsWithMatches = events
+            .map(event => {
+                const requiredSkills = Array.isArray(event.requiredSkills) ? event.requiredSkills.filter(Boolean) : [];
+                const hasGeneralSupport = requiredSkills.includes('General Support');
+                const matchedSkills = hasGeneralSupport
+                    ? ['General Support']
+                    : requiredSkills.filter(skill => volunteerSkills.includes(skill));
+                const isMatched = hasGeneralSupport || matchedSkills.length > 0;
+
+                return {
+                    ...event.toObject(),
+                    matchedSkills,
+                    matchCount: hasGeneralSupport ? 1 : matchedSkills.length,
+                    matchPercentage: hasGeneralSupport
+                        ? 100
+                        : (requiredSkills.length > 0
+                            ? Math.round((matchedSkills.length / requiredSkills.length) * 100)
+                            : 0),
+                    isMatched,
+                    hasGeneralSupport
+                };
+            })
+            .filter(event => event.isMatched)
+            .sort((a, b) => b.matchCount - a.matchCount);
 
         return {
             volunteer: volunteer.fullName,
-            volunteerSkills: volunteer.skills,
+            volunteerSkills,
             totalMatches: eventsWithMatches.length,
             events: eventsWithMatches
         };

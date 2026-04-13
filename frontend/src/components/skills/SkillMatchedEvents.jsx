@@ -20,11 +20,20 @@ const SkillMatchedEvents = () => {
 
             // Fetch volunteer's skills
             const skillsRes = await api.get('/volunteer/profile/skills');
-            setVolunteerSkills(skillsRes.data.skills);
+            setVolunteerSkills(skillsRes.data.skills || []);
 
-            // Fetch matched events
-            const eventsRes = await api.get(`/volunteer/skill-matched-events?status=${filter}`);
-            setEvents(eventsRes.data.events || []);
+            // Fetch skill-matched events, including General Support events open to all
+            const eventsRes = await api.get(`/volunteer/available-events`);
+            const matchedEvents = Array.isArray(eventsRes.data?.events) ? eventsRes.data.events : [];
+            setEvents(matchedEvents.filter((event) => {
+                if (filter === 'upcoming') {
+                    return (event.status || 'upcoming') === 'upcoming';
+                }
+                if (filter === 'ongoing') {
+                    return (event.status || 'upcoming') === 'ongoing';
+                }
+                return true;
+            }));
         } catch (err) {
             setError(err.response?.data?.message || 'Error fetching matched events');
             console.error('Error:', err);
@@ -118,7 +127,18 @@ const SkillMatchedEvents = () => {
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {events.map(event => (
+                    {events.map(event => {
+                        const matchedSkills = Array.isArray(event.matchedSkills)
+                            ? event.matchedSkills
+                            : Array.isArray(event.matchingSkills)
+                                ? event.matchingSkills
+                                : [];
+                        const isOpen = Boolean(event.hasGeneralSupport || event.isOpenToAll || matchedSkills.includes('General Support'));
+                        const matchPercentage = typeof event.matchPercentage === 'number'
+                            ? event.matchPercentage
+                            : (isOpen ? 100 : (matchedSkills.length > 0 ? 100 : 0));
+
+                        return (
                         <div key={event._id} className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
                             {/* Event title and match badge */}
                             <div className="flex items-start justify-between mb-4">
@@ -126,8 +146,8 @@ const SkillMatchedEvents = () => {
                                     <h3 className="text-lg font-bold text-gray-800 mb-2">{event.title}</h3>
                                     <p className="text-gray-600 text-sm line-clamp-2">{event.description}</p>
                                 </div>
-                                <div className={`ml-4 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${getMatchPercentageColor(event.matchPercentage)}`}>
-                                    🎯 {event.matchPercentage}% Match
+                                <div className={`ml-4 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${getMatchPercentageColor(matchPercentage)}`}>
+                                    🎯 {matchPercentage}% Match
                                 </div>
                             </div>
 
@@ -135,11 +155,16 @@ const SkillMatchedEvents = () => {
                             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
                                 <p className="text-sm font-medium text-blue-900 mb-2">Your Matching Skills:</p>
                                 <div className="flex flex-wrap gap-2">
-                                    {event.matchedSkills.map(skill => (
+                                    {matchedSkills.map(skill => (
                                         <span key={skill} className="bg-blue-200 text-blue-900 px-2 py-1 rounded text-xs font-medium">
                                             ✓ {skill}
                                         </span>
                                     ))}
+                                    {isOpen && !matchedSkills.includes('General Support') && (
+                                        <span className="bg-green-200 text-green-900 px-2 py-1 rounded text-xs font-medium">
+                                            🌍 General Support
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -151,7 +176,7 @@ const SkillMatchedEvents = () => {
                                 </div>
                                 <div className="flex items-center gap-2 text-gray-600">
                                     <MapPin size={16} />
-                                    <span className="truncate">{event.location?.address}</span>
+                                    <span className="truncate">{event.location?.address || event.location}</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-gray-600">
                                     <Users size={16} />
@@ -166,12 +191,12 @@ const SkillMatchedEvents = () => {
                             </div>
 
                             {/* Required skills that you don't have */}
-                            {event.requiredSkills && event.requiredSkills.length > event.matchedSkills.length && (
+                            {Array.isArray(event.requiredSkills) && event.requiredSkills.length > matchedSkills.length && !isOpen && (
                                 <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                                     <p className="text-xs font-medium text-gray-700 mb-2">Also needs:</p>
                                     <div className="flex flex-wrap gap-2">
                                         {event.requiredSkills
-                                            .filter(skill => !event.matchedSkills.includes(skill))
+                                            .filter(skill => !matchedSkills.includes(skill))
                                             .map(skill => (
                                                 <span key={skill} className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs">
                                                     {skill}
@@ -191,7 +216,8 @@ const SkillMatchedEvents = () => {
                                 </button>
                             </div>
                         </div>
-                    ))}
+                        )
+                    })}
                 </div>
             )}
         </div>

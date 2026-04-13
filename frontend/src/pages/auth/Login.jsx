@@ -35,6 +35,12 @@ const Login = () => {
     { value: 'organizer', label: 'Organizer' }
   ]
 
+  const isAccountBlockedMessage = (message) => {
+    if (!message) return false
+    const normalized = message.toLowerCase()
+    return normalized.includes('disabled') || normalized.includes('blocked')
+  }
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({
@@ -45,13 +51,13 @@ const Login = () => {
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
-    // Clear global error
-    if (loginError) setLoginError('')
+    // Keep blocked-account errors visible for clarity.
+    if (loginError && !isAccountBlockedMessage(loginError)) setLoginError('')
   }
 
   const handleRoleChange = (roleValue) => {
     setFormData(prev => ({ ...prev, role: roleValue }))
-    if (loginError) setLoginError('')
+    if (loginError && !isAccountBlockedMessage(loginError)) setLoginError('')
   }
 
   const validate = () => {
@@ -100,12 +106,18 @@ const Login = () => {
       }
     } catch (error) {
       console.error('Login error:', error)
-      const isUnauthorized = error.response?.status === 401
-      const errorMessage = isUnauthorized
-        ? 'Invalid credentials'
-        : (error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Login failed. Please try again.')
+      const status = error.response?.status
+      const backendMessage = error.response?.data?.message || error.response?.data?.error
+
+      let errorMessage = 'Login failed. Please try again.'
+      if (status === 401) {
+        errorMessage = backendMessage || 'Invalid credentials'
+      } else if (status === 403) {
+        errorMessage = backendMessage || 'Account disabled by admin. Please contact support.'
+      } else {
+        errorMessage = backendMessage || errorMessage
+      }
+
       setLoginError(errorMessage)
     } finally {
       setIsLoading(false)
@@ -125,7 +137,7 @@ const Login = () => {
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on">
             {/* Role Selection Tabs */}
             <div className="animate-slideInUp">
               <label className="block text-sm font-semibold text-gray-700 mb-3">
@@ -162,6 +174,9 @@ const Login = () => {
                 error={errors.email}
                 placeholder="you@example.com"
                 autoComplete="email"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
               />
             </div>
@@ -177,6 +192,9 @@ const Login = () => {
                 error={errors.password}
                 placeholder="••••••••"
                 autoComplete="current-password"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
               />
               <div className="flex justify-end items-center gap-4">

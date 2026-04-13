@@ -18,33 +18,31 @@ const SkillMatchedEventsComponent = () => {
 
   const fetchEvents = async () => {
     try {
-      const response = await api.get('/volunteer/events')
-      setEvents(response.data || [])
-    } catch (error) {
-      console.error('Error fetching events:', error)
+      const response = await api.get('/volunteer/available-events')
+      setEvents(Array.isArray(response.data?.events) ? response.data.events : [])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const getSkillMatch = (eventSkills, volunteerSkills) => {
-    if (!Array.isArray(eventSkills) || !Array.isArray(volunteerSkills)) {
-      return { matches: [], percentage: 0, isOpen: false }
-    }
+  const getSkillMatch = (event, volunteerSkills) => {
+    const eventSkills = Array.isArray(event?.requiredSkills) ? event.requiredSkills : []
+    const matchedSkills = Array.isArray(event?.matchedSkills)
+      ? event.matchedSkills
+      : Array.isArray(event?.matchingSkills)
+        ? event.matchingSkills
+        : volunteerSkills.filter(skill => eventSkills.includes(skill))
 
-    const isOpenToAll = eventSkills.includes('General Support')
-    if (isOpenToAll) {
-      return { matches: ['General Support'], percentage: 100, isOpen: true }
-    }
+    const isOpenToAll = Boolean(event?.hasGeneralSupport || event?.isOpenToAll || eventSkills.includes('General Support') || matchedSkills.includes('General Support'))
+    const percentage = typeof event?.matchPercentage === 'number'
+      ? event.matchPercentage
+      : (isOpenToAll ? 100 : (eventSkills.length > 0 ? Math.round((matchedSkills.length / eventSkills.length) * 100) : 0))
 
-    const matched = volunteerSkills.filter(skill => eventSkills.includes(skill))
-    const percentage = eventSkills.length > 0 ? Math.round((matched.length / eventSkills.length) * 100) : 0
-
-    return { matches: matched, percentage, isOpen: false }
+    return { matches: isOpenToAll ? ['General Support'] : matchedSkills, percentage, isOpen: isOpenToAll }
   }
 
   const filteredEvents = events.filter(event => {
-    const skillMatch = getSkillMatch(event.requiredSkills, volunteer?.skills || [])
+    const skillMatch = getSkillMatch(event, volunteer?.skills || [])
     
     if (filterBy === 'matched') {
       return skillMatch.matches.length > 0
@@ -120,7 +118,7 @@ const SkillMatchedEventsComponent = () => {
       ) : (
         <div className="space-y-4">
           {filteredEvents.map(event => {
-            const skillMatch = getSkillMatch(event.requiredSkills, volunteer?.skills || [])
+            const skillMatch = getSkillMatch(event, volunteer?.skills || [])
             const label = getEventLabel(event, skillMatch)
 
             return (

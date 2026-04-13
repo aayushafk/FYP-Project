@@ -413,12 +413,20 @@ const EventDetailPage = () => {
       // Close the modal first
       setShowParticipationModal(false);
       
-      // Immediately re-fetch the event details to get updated participation status
+      // Immediately refresh both event metadata and chat history so the volunteer
+      // can see existing text/location messages without a manual browser refresh.
       await fetchEventDetails();
-      
-      // Re-join the event room with socket to ensure real-time updates
+      await fetchMessages();
+
+      // Re-join real-time rooms after acceptance to ensure live updates continue.
       if (user) {
         const socket = socketService.getSocket();
+        socket.emit('joinEventChat', {
+          eventId,
+          userId: user._id,
+          userName: user.fullName,
+          userRole: user.role
+        });
         socket.emit('joinEventRoom', {
           eventId,
           userId: user._id,

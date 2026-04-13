@@ -1,82 +1,84 @@
-import React, { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, AlertTriangle, Info, X } from 'lucide-react';
+import React, { useEffect } from 'react'
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react'
+
+const TOAST_STYLES = {
+  success: {
+    container: 'border-emerald-200 bg-emerald-50/90',
+    icon: CheckCircle2,
+    iconColor: 'text-emerald-600',
+    titleColor: 'text-emerald-900',
+    textColor: 'text-emerald-800',
+    progress: 'bg-emerald-400'
+  },
+  error: {
+    container: 'border-red-200 bg-red-50/90',
+    icon: AlertCircle,
+    iconColor: 'text-red-600',
+    titleColor: 'text-red-900',
+    textColor: 'text-red-800',
+    progress: 'bg-red-400'
+  },
+  warning: {
+    container: 'border-amber-200 bg-amber-50/90',
+    icon: AlertTriangle,
+    iconColor: 'text-amber-600',
+    titleColor: 'text-amber-900',
+    textColor: 'text-amber-800',
+    progress: 'bg-amber-400'
+  },
+  info: {
+    container: 'border-blue-200 bg-blue-50/90',
+    icon: Info,
+    iconColor: 'text-blue-600',
+    titleColor: 'text-blue-900',
+    textColor: 'text-blue-800',
+    progress: 'bg-blue-400'
+  }
+}
 
 const Toast = ({ id, type = 'info', title, message, duration = 5000, onClose }) => {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose(id);
-    }, duration);
+    const timer = setTimeout(() => onClose(id), duration)
+    return () => clearTimeout(timer)
+  }, [id, duration, onClose])
 
-    return () => clearTimeout(timer);
-  }, [id, duration, onClose]);
-
-  const config = {
-    success: {
-      bg: 'bg-green-50',
-      border: 'border-green-200',
-      icon: CheckCircle,
-      iconColor: 'text-green-600',
-      titleColor: 'text-green-900',
-      textColor: 'text-green-700'
-    },
-    error: {
-      bg: 'bg-red-50',
-      border: 'border-red-200',
-      icon: AlertCircle,
-      iconColor: 'text-red-600',
-      titleColor: 'text-red-900',
-      textColor: 'text-red-700'
-    },
-    warning: {
-      bg: 'bg-yellow-50',
-      border: 'border-yellow-200',
-      icon: AlertTriangle,
-      iconColor: 'text-yellow-600',
-      titleColor: 'text-yellow-900',
-      textColor: 'text-yellow-700'
-    },
-    info: {
-      bg: 'bg-blue-50',
-      border: 'border-blue-200',
-      icon: Info,
-      iconColor: 'text-blue-600',
-      titleColor: 'text-blue-900',
-      textColor: 'text-blue-700'
-    }
-  };
-
-  const style = config[type];
-  const IconComponent = style.icon;
+  const style = TOAST_STYLES[type] || TOAST_STYLES.info
+  const Icon = style.icon
 
   return (
-    <div className={`${style.bg} ${style.border} border rounded-lg p-4 flex items-start space-x-3 animate-slideIn`}>
-      <IconComponent size={20} className={`${style.iconColor} flex-shrink-0 mt-0.5`} />
-      <div className="flex-1">
-        {title && <p className={`font-semibold ${style.titleColor}`}>{title}</p>}
-        {message && <p className={`text-sm ${style.textColor}`}>{message}</p>}
+    <div className={`relative overflow-hidden rounded-xl border p-4 shadow-md backdrop-blur-sm animate-slideInRight ${style.container}`}>
+      <div className="flex items-start gap-3">
+        <Icon size={19} className={`mt-0.5 shrink-0 ${style.iconColor}`} />
+
+        <div className="min-w-0 flex-1">
+          {title && <p className={`font-semibold leading-tight ${style.titleColor}`}>{title}</p>}
+          {message && <p className={`mt-0.5 text-sm leading-relaxed ${style.textColor}`}>{message}</p>}
+        </div>
+
+        <button
+          onClick={() => onClose(id)}
+          className={`rounded-lg p-1 transition hover:bg-black/5 ${style.textColor}`}
+          aria-label="Dismiss notification"
+        >
+          <X size={16} />
+        </button>
       </div>
-      <button
-        onClick={() => onClose(id)}
-        className={`${style.textColor} hover:opacity-70 flex-shrink-0`}
-      >
-        <X size={18} />
-      </button>
-    </div>
-  );
-};
 
-const ToastContainer = ({ toasts, onRemoveToast }) => {
-  return (
-    <div className="fixed top-6 right-6 z-50 space-y-3 max-w-md">
-      {toasts.map(toast => (
-        <Toast
-          key={toast.id}
-          {...toast}
-          onClose={onRemoveToast}
-        />
-      ))}
+      <div className="pointer-events-none absolute bottom-0 left-0 h-1 w-full bg-black/5" />
+      <div
+        className={`pointer-events-none absolute bottom-0 left-0 h-1 ${style.progress}`}
+        style={{ width: '100%', animation: `shrinkBar ${duration}ms linear forwards` }}
+      />
     </div>
-  );
-};
+  )
+}
 
-export { Toast, ToastContainer };
+const ToastContainer = ({ toasts, onRemoveToast }) => (
+  <div className="fixed right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-md flex-col gap-3 sm:right-6 sm:top-6 sm:w-full">
+    {toasts.map((toast) => (
+      <Toast key={toast.id} {...toast} onClose={onRemoveToast} />
+    ))}
+  </div>
+)
+
+export { Toast, ToastContainer }

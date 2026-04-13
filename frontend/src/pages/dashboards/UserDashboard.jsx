@@ -11,7 +11,7 @@ import {
 import CitizenHelpRequestAnalytics from '../../components/analytics/CitizenHelpRequestAnalytics';
 
 const UserDashboard = () => {
-    const { user } = useAuth();
+    const { user, loading } = useAuth();
     const navigate = useNavigate();
     const chatEndRef = useRef(null);
 
@@ -68,6 +68,18 @@ const UserDashboard = () => {
         try {
             const response = await api.get('/citizen/requests');
             const allRequests = response.data.requests || response.data;
+
+                // Add loading fallback at the beginning of render
+                if (loading || !user) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                            <div className="text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-primary-600 mx-auto mb-4"></div>
+                                <p className="text-slate-600 font-medium">Loading dashboard...</p>
+                            </div>
+                        </div>
+                    )
+                }
             
             // Filter out help requests associated with specific events
             // Only show standalone help requests (without eventId)
@@ -296,45 +308,138 @@ const UserDashboard = () => {
         { value: 'Other', label: 'Other / General' }
     ];
 
-    return (
-        <div className="min-h-screen bg-slate-50">
+    const firstName = user?.fullName?.split(' ')[0] || 'there';
+    const userInitial = user?.fullName?.charAt(0) || 'U';
 
-            {/* ─── Dark Gradient Header ─── */}
-            <div className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl font-bold shadow-lg ring-2 ring-white/25">
-                                {user.fullName?.charAt(0) || 'U'}
+    const statusCounts = myRequests.reduce(
+        (counts, request) => {
+            const status = request.trackingStatus || request.status;
+
+            if (status === 'Pending') {
+                counts.pending += 1;
+            } else if (status === 'In Progress' || status === 'Assigned') {
+                counts.inProgress += 1;
+            } else if (status === 'Completed') {
+                counts.completed += 1;
+            }
+
+            return counts;
+        },
+        { pending: 0, inProgress: 0, completed: 0 }
+    );
+
+    const headerStats = [
+        {
+            label: 'Total Requests',
+            value: myRequests.length,
+            icon: FileText,
+            iconBg: 'bg-slate-300/20',
+            iconColor: 'text-slate-100',
+            accentBar: 'from-slate-200 to-zinc-100'
+        },
+        {
+            label: 'Pending',
+            value: statusCounts.pending,
+            icon: Clock,
+            iconBg: 'bg-orange-300/20',
+            iconColor: 'text-amber-100',
+            accentBar: 'from-orange-200 to-amber-100'
+        },
+        {
+            label: 'In Progress',
+            value: statusCounts.inProgress,
+            icon: Activity,
+            iconBg: 'bg-teal-300/20',
+            iconColor: 'text-teal-100',
+            accentBar: 'from-teal-200 to-emerald-100'
+        },
+        {
+            label: 'Completed',
+            value: statusCounts.completed,
+            icon: CheckCircle,
+            iconBg: 'bg-emerald-300/25',
+            iconColor: 'text-emerald-100',
+            accentBar: 'from-emerald-200 to-lime-100'
+        }
+    ];
+
+    if (loading || !user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-primary-600 mx-auto mb-4"></div>
+                    <p className="text-slate-600 font-medium">Loading dashboard...</p>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="dashboard-premium min-h-screen bg-slate-50/80">
+
+            {/* ─── Premium Header Section ─── */}
+            <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 text-white shadow-[0_24px_40px_-28px_rgba(15,23,42,0.85)]">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_15%,rgba(245,158,11,0.18),transparent_34%),radial-gradient(circle_at_84%_20%,rgba(16,185,129,0.2),transparent_36%)]" />
+                <div className="pointer-events-none absolute -bottom-20 right-8 h-48 w-48 rounded-full bg-amber-300/10 blur-3xl" />
+
+                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+                        <div className="flex items-center gap-4 sm:gap-5">
+                            <div className="relative">
+                                <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-3xl border border-white/40 bg-white/15 backdrop-blur-md flex items-center justify-center text-2xl sm:text-3xl font-bold text-white shadow-xl ring-1 ring-white/20">
+                                    {userInitial}
+                                </div>
+                                <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-emerald-400 ring-4 ring-slate-700 flex items-center justify-center">
+                                    <CheckCircle size={12} className="text-white" />
+                                </div>
                             </div>
+
                             <div>
-                                <h1 className="text-2xl sm:text-3xl font-bold">Welcome back, {user.fullName?.split(' ')[0]}!</h1>
-                                <p className="text-gray-400 mt-0.5">Citizen Dashboard</p>
+                                <h1 className="dashboard-hero-title text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+                                    Welcome back, {firstName}!
+                                </h1>
+                                <p className="mt-1 text-sm sm:text-base font-medium text-slate-200/95">Citizen Dashboard</p>
+                                <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/35 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-200">
+                                    <Users size={13} />
+                                    Community Response Workspace
+                                </span>
                             </div>
                         </div>
-                        <div className="flex gap-3">
-                            <button onClick={() => setShowCreateRequest(true)} className="flex items-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 rounded-xl text-sm font-medium shadow-md transition-all">
-                                <Plus size={16} /> Help Request
+
+                        <div className="flex gap-3 self-start lg:self-center">
+                            <button
+                                onClick={() => setShowCreateRequest(true)}
+                                className="group inline-flex items-center gap-2.5 rounded-2xl border border-white/40 bg-white/15 px-5 py-3 text-sm font-semibold text-white backdrop-blur-md shadow-lg transition-all hover:-translate-y-0.5 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                            >
+                                <span className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center transition-transform group-hover:scale-110">
+                                    <Plus size={14} />
+                                </span>
+                                Help Request
                             </button>
                         </div>
                     </div>
 
                     {/* Quick Stats */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8">
-                        {[
-                            { label: 'Total Requests', value: myRequests.length, icon: FileText, gradient: 'from-indigo-500 to-violet-500', iconColor: 'text-white', iconBg: 'bg-gradient-to-br from-indigo-500 to-violet-500' },
-                            { label: 'Pending', value: myRequests.filter(r => (r.trackingStatus || r.status) === 'Pending').length, icon: Clock, gradient: 'from-amber-400 to-orange-400', iconColor: 'text-white', iconBg: 'bg-gradient-to-br from-amber-400 to-orange-400' },
-                            { label: 'In Progress', value: myRequests.filter(r => (r.trackingStatus || r.status) === 'In Progress' || (r.trackingStatus || r.status) === 'Assigned').length, icon: Activity, gradient: 'from-teal-400 to-cyan-400', iconColor: 'text-white', iconBg: 'bg-gradient-to-br from-teal-400 to-cyan-400' },
-                            { label: 'Completed', value: myRequests.filter(r => (r.trackingStatus || r.status) === 'Completed').length, icon: CheckCircle, gradient: 'from-emerald-400 to-green-400', iconColor: 'text-white', iconBg: 'bg-gradient-to-br from-emerald-400 to-green-400' }
-                        ].map((s, i) => (
-                            <div key={i} className={`bg-gradient-to-br ${s.gradient} backdrop-blur border border-white/10 rounded-xl p-4 shadow-md`}>
-                                <div className="flex items-center gap-2 text-white/90 text-xs font-medium mb-1">
-                                    <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                                        <s.icon size={12} />
+                    <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                        {headerStats.map((stat, index) => (
+                            <div
+                                key={stat.label}
+                                className="relative overflow-hidden rounded-2xl border border-white/35 bg-white/[0.12] p-4 sm:p-5 backdrop-blur-md shadow-lg"
+                                style={{ animationDelay: `${index * 80}ms` }}
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-200/90">{stat.label}</p>
+                                        <p className="mt-2 text-4xl leading-none font-extrabold text-white">{stat.value}</p>
+                                        <p className="mt-2 text-xs text-slate-300/80">Updated in real time</p>
                                     </div>
-                                    {s.label}
+
+                                    <div className={`h-10 w-10 rounded-xl ${stat.iconBg} border border-white/30 flex items-center justify-center`}>
+                                        <stat.icon size={18} className={stat.iconColor} />
+                                    </div>
                                 </div>
-                                <p className="text-2xl font-bold text-white">{s.value}</p>
+
+                                <div className={`mt-4 h-1.5 w-full rounded-full bg-gradient-to-r ${stat.accentBar} opacity-90`} />
                             </div>
                         ))}
                     </div>
@@ -342,26 +447,30 @@ const UserDashboard = () => {
             </div>
 
             {/* ─── Tab Navigation ─── */}
-            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl border-b border-gray-200/80 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex gap-1 overflow-x-auto no-scrollbar">
+            <div className="sticky top-0 z-20 border-b border-slate-200/80 bg-slate-50/85 backdrop-blur-xl">
+                <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8">
+                    <div className="dashboard-tab-shell inline-flex min-w-full sm:min-w-0 items-center gap-2 overflow-x-auto rounded-2xl px-2 py-2 no-scrollbar">
                         {tabs.map(tab => (
                             <button
                                 key={tab.id}
                                 onClick={() => { setActiveTab(tab.id); setSelectedEvent(null); setSelectedVolunteer(null); }}
-                                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+                                className={`flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all whitespace-nowrap ${
                                     activeTab === tab.id
-                                        ? 'border-purple-600 text-purple-700'
-                                        : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                                        ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
+                                        : 'text-slate-600 hover:bg-white/85 hover:text-slate-900'
                                 }`}
                             >
                                 <tab.icon size={16} />
                                 {tab.label}
                                 {tab.id === 'requests' && myRequests.length > 0 && (
-                                    <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{myRequests.length}</span>
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                                        {myRequests.length}
+                                    </span>
                                 )}
                                 {tab.id === 'events' && events.length > 0 && (
-                                    <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full">{events.length}</span>
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
+                                        {events.length}
+                                    </span>
                                 )}
                             </button>
                         ))}
@@ -370,7 +479,7 @@ const UserDashboard = () => {
             </div>
 
             {/* ─── Main Content ─── */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 pb-10">
 
                 {/* Toasts */}
                 {requestSuccess && (
@@ -387,32 +496,32 @@ const UserDashboard = () => {
 
                 {/* New Event Notifications */}
                 {showNotifications && notifications.filter(n => !n.read).length > 0 && (
-                    <div className="mb-6 bg-white border-l-4 border-l-indigo-400 border border-gray-200 rounded-2xl p-5 shadow-sm">
+                    <div className="mb-6 dashboard-surface border-l-4 border-l-amber-400 p-5">
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-                                    <Bell className="text-indigo-600" size={20} />
+                                <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
+                                    <Bell className="text-slate-700" size={20} />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-gray-900">New Events</h3>
+                                    <h3 className="dashboard-heading font-bold text-gray-900">New Events</h3>
                                     <p className="text-xs text-gray-500">{unreadCount} new event{unreadCount !== 1 ? 's' : ''} created</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button onClick={markAllNotificationsRead} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium px-3 py-1.5 bg-white rounded-lg border border-indigo-200 hover:bg-indigo-50 transition-all">Mark all read</button>
+                                <button onClick={markAllNotificationsRead} className="text-xs text-slate-700 hover:text-slate-900 font-medium px-3 py-1.5 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-all">Mark all read</button>
                                 <button onClick={() => setShowNotifications(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none p-1">&times;</button>
                             </div>
                         </div>
                         <div className="space-y-2">
                             {notifications.filter(n => !n.read).slice(0, 3).map(notif => (
                                 <div key={notif._id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-sm transition-all cursor-pointer group" onClick={() => { if (notif.relatedId) navigate(`/event/${notif.relatedId}`); }}>
-                                    <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center shrink-0">
-                                        <Calendar className="text-indigo-600" size={16} />
+                                    <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+                                        <Calendar className="text-slate-600" size={16} />
                                     </div>
                                     <p className="text-sm text-gray-700 flex-1">{notif.message}</p>
                                     <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs text-gray-400">{new Date(notif.createdAt).toLocaleDateString()}</span>
-                                        <ExternalLink size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
+                                        <ExternalLink size={14} className="text-gray-300 group-hover:text-slate-600 transition-colors" />
                                     </div>
                                 </div>
                             ))}
@@ -425,22 +534,22 @@ const UserDashboard = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                         {/* Profile Card */}
-                        <div className="bg-white rounded-2xl shadow-md ring-1 ring-gray-200 overflow-hidden">
-                            <div className="bg-gradient-to-r from-indigo-500 to-violet-500 p-6 text-center">
+                        <div className="dashboard-surface overflow-hidden">
+                            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 p-6 text-center">
                                 <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm mx-auto flex items-center justify-center text-3xl font-bold text-white shadow-lg ring-4 ring-white/15">
-                                    {user.fullName?.charAt(0) || 'U'}
+                                    {user?.fullName?.charAt(0) || 'U'}
                                 </div>
-                                <h3 className="text-lg font-bold text-white mt-3">{user.fullName}</h3>
-                                <p className="text-indigo-100 text-sm">{user.email}</p>
+                                <h3 className="dashboard-heading text-lg font-bold text-white mt-3">{user?.fullName || 'User'}</h3>
+                                <p className="text-slate-200 text-sm">{user?.email || 'N/A'}</p>
                             </div>
                             <div className="p-5 space-y-3">
                                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
                                     <span className="text-gray-500 text-sm">Role</span>
-                                    <span className="text-sm font-semibold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg capitalize">{user.role || 'Citizen'}</span>
+                                    <span className="text-sm font-semibold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg capitalize">{user?.role || 'Citizen'}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
                                     <span className="text-gray-500 text-sm">Phone</span>
-                                    <span className="text-sm font-medium text-gray-900">{user.phoneNumber || 'Not set'}</span>
+                                    <span className="text-sm font-medium text-gray-900">{user?.phoneNumber || 'Not set'}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-2">
                                     <span className="text-gray-500 text-sm">Requests</span>
@@ -450,20 +559,20 @@ const UserDashboard = () => {
                         </div>
 
                         {/* Recent Requests */}
-                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-md ring-1 ring-gray-200 overflow-hidden">
+                        <div className="lg:col-span-2 dashboard-surface overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100 border-l-4 border-l-teal-400 flex items-center justify-between">
                                 <div>
-                                    <h3 className="font-bold text-slate-900">Recent Requests</h3>
+                                    <h3 className="dashboard-heading font-bold text-slate-900">Recent Requests</h3>
                                     <p className="text-sm text-gray-400">Your latest help requests</p>
                                 </div>
-                                <button onClick={() => setActiveTab('requests')} className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                                <button onClick={() => setActiveTab('requests')} className="text-sm text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1">
                                     View All <ChevronRight size={14} />
                                 </button>
                             </div>
                             <div className="p-4">
                                 {isLoading ? (
                                     <div className="flex items-center justify-center py-12">
-                                        <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                                        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-600 rounded-full animate-spin"></div>
                                     </div>
                                 ) : myRequests.length === 0 ? (
                                     <div className="text-center py-12">
@@ -481,6 +590,19 @@ const UserDashboard = () => {
                                         {myRequests.slice(0, 4).map(request => {
                                             const status = request.trackingStatus || request.status;
                                             const volunteerCount = request.assignedVolunteers?.length || 0;
+
+                                                // Check if user data is still loading
+                                                if (loading || !user) {
+                                                    return (
+                                                        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                                                            <div className="text-center">
+                                                                <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-primary-600 mx-auto mb-4"></div>
+                                                                <p className="text-slate-600 font-medium">Loading dashboard...</p>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                }
+
                                             return (
                                                 <div key={request._id} className={`flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-all cursor-pointer group ${
                                                     request.isEmergency ? 'border-2 border-red-200 bg-red-50' : ''
@@ -511,20 +633,20 @@ const UserDashboard = () => {
                         </div>
 
                         {/* Events Preview */}
-                        <div className="lg:col-span-3 bg-white rounded-2xl shadow-md ring-1 ring-gray-200 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-gray-100 border-l-4 border-l-indigo-400 flex items-center justify-between">
+                        <div className="lg:col-span-3 dashboard-surface overflow-hidden">
+                            <div className="px-6 py-4 border-b border-gray-100 border-l-4 border-l-amber-400 flex items-center justify-between">
                                 <div>
-                                    <h3 className="font-bold text-slate-900">Available Events</h3>
+                                    <h3 className="dashboard-heading font-bold text-slate-900">Available Events</h3>
                                     <p className="text-sm text-gray-400">Community events where you can request help</p>
                                 </div>
-                                <button onClick={() => setActiveTab('events')} className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                                <button onClick={() => setActiveTab('events')} className="text-sm text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1">
                                     Browse All <ChevronRight size={14} />
                                 </button>
                             </div>
                             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {eventsLoading ? (
                                     <div className="col-span-full flex items-center justify-center py-12">
-                                        <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                                        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-600 rounded-full animate-spin"></div>
                                     </div>
                                 ) : events.length === 0 ? (
                                     <div className="col-span-full text-center py-12">
@@ -533,14 +655,14 @@ const UserDashboard = () => {
                                         <p className="text-sm text-gray-400 mt-1">Check back later for community events</p>
                                     </div>
                                                 ) : events.slice(0, 3).map(event => (
-                                    <div key={event._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group bg-white" onClick={() => { setSelectedEvent(event); setActiveTab('events'); }}>
+                                    <div key={event._id} className="dashboard-surface-soft p-4 hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group" onClick={() => { setSelectedEvent(event); setActiveTab('events'); }}>
                                         <div className="flex items-start justify-between mb-3">
                                             <span className={`text-xs font-medium px-2 py-1 rounded-lg capitalize ${getEventStatusColor(event.status)}`}>{event.status}</span>
-                                            <div className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center">
-                                                <Calendar className="text-indigo-600" size={14} />
+                                            <div className="w-7 h-7 bg-slate-100 rounded-lg flex items-center justify-center">
+                                                <Calendar className="text-slate-600" size={14} />
                                             </div>
                                         </div>
-                                        <h4 className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors mb-1">{event.title}</h4>
+                                        <h4 className="dashboard-heading font-semibold text-slate-900 group-hover:text-slate-700 transition-colors mb-1">{event.title}</h4>
                                         <p className="text-sm text-gray-500 line-clamp-2">{event.description}</p>
                                         <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
                                             {event.location && <span className="flex items-center gap-1"><MapPin size={12} /> {event.location}</span>}
@@ -560,12 +682,12 @@ const UserDashboard = () => {
                             <div className="relative max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                 <input type="text" placeholder="Search events..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all shadow-sm" />
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none transition-all shadow-sm" />
                             </div>
                         </div>
 
                         {eventsLoading ? (
-                            <div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div></div>
+                            <div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-slate-200 border-t-slate-600 rounded-full animate-spin"></div></div>
                         ) : filteredEvents.length === 0 ? (
                             <div className="text-center py-20">
                                 <Calendar className="text-gray-300 mx-auto mb-4" size={48} />
@@ -575,7 +697,7 @@ const UserDashboard = () => {
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                                 {filteredEvents.map(event => (
-                                    <div key={event._id} className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200 overflow-hidden hover:shadow-md hover:ring-indigo-300 transition-all duration-300 cursor-pointer group" onClick={() => setSelectedEvent(event)}>
+                                    <div key={event._id} className="dashboard-surface overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group hover:-translate-y-0.5" onClick={() => setSelectedEvent(event)}>
                                         <div className="bg-gray-50 p-4 border-b border-gray-100">
                                             <div className="flex items-center justify-between mb-2">
                                                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg capitalize ${getEventStatusColor(event.status)}`}>{event.status}</span>
@@ -583,7 +705,7 @@ const UserDashboard = () => {
                                                     <span className="flex items-center gap-1 text-xs text-gray-500"><Users size={12} /> {event.assignedVolunteers.length}</span>
                                                 )}
                                             </div>
-                                            <h3 className="font-bold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors">{event.title}</h3>
+                                            <h3 className="dashboard-heading font-bold text-slate-900 text-lg group-hover:text-slate-700 transition-colors">{event.title}</h3>
                                         </div>
                                         <div className="p-4">
                                             <p className="text-sm text-gray-600 line-clamp-3 mb-4">{event.description}</p>
@@ -594,7 +716,7 @@ const UserDashboard = () => {
                                             {event.requiredSkills?.length > 0 && (
                                                 <div className="flex flex-wrap gap-1.5 mt-4">
                                                     {event.requiredSkills.slice(0, 3).map((skill, i) => (
-                                                        <span key={i} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-medium">{typeof skill === 'object' ? skill.name || skill.skill : skill}</span>
+                                                        <span key={i} className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium">{typeof skill === 'object' ? skill.name || skill.skill : skill}</span>
                                                     ))}
                                                     {event.requiredSkills.length > 3 && <span className="text-xs text-gray-400">+{event.requiredSkills.length - 3} more</span>}
                                                 </div>
@@ -608,7 +730,7 @@ const UserDashboard = () => {
                                                 <button onClick={e2 => { e2.stopPropagation(); navigate(`/event/${event._id}`); }} className="px-3 py-2 text-violet-500 hover:text-white hover:bg-violet-500 rounded-xl transition-all" title="Join Event Chat">
                                                     <MessageCircle size={18} />
                                                 </button>
-                                                <button onClick={e2 => { e2.stopPropagation(); setSelectedEvent(event); }} className="px-3 py-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+                                                <button onClick={e2 => { e2.stopPropagation(); setSelectedEvent(event); }} className="px-3 py-2 text-gray-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all">
                                                     <ChevronRight size={18} />
                                                 </button>
                                             </div>
@@ -623,18 +745,18 @@ const UserDashboard = () => {
                 {/* ════════ EVENTS TAB – Detail View ════════ */}
                 {activeTab === 'events' && selectedEvent && (
                     <div>
-                        <button onClick={() => { setSelectedEvent(null); setSelectedVolunteer(null); }} className="flex items-center gap-2 text-sm text-gray-500 hover:text-indigo-600 font-medium mb-6 transition-colors">
+                        <button onClick={() => { setSelectedEvent(null); setSelectedVolunteer(null); }} className="flex items-center gap-2 text-sm text-gray-500 hover:text-slate-700 font-medium mb-6 transition-colors">
                             <ArrowLeft size={16} /> Back to Events
                         </button>
 
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             {/* Left – Event Info */}
-                            <div className="lg:col-span-2 bg-white rounded-2xl shadow-md ring-1 ring-gray-200 overflow-hidden">
-                                <div className="bg-gradient-to-r from-indigo-500 to-violet-500 p-6 text-white">
+                            <div className="lg:col-span-2 dashboard-surface overflow-hidden">
+                                <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 p-6 text-white">
                                     <span className="inline-block text-xs font-semibold px-3 py-1 rounded-lg capitalize bg-white/20 text-white border border-white/20 backdrop-blur mb-3">{selectedEvent.status}</span>
-                                    <h2 className="text-2xl font-bold">{selectedEvent.title}</h2>
+                                    <h2 className="dashboard-heading text-2xl font-bold">{selectedEvent.title}</h2>
                                     {selectedEvent.organizer && (
-                                        <p className="text-indigo-100 text-sm mt-1">Organized by {selectedEvent.organizer.fullName || selectedEvent.organizer.name || 'Organizer'}</p>
+                                        <p className="text-slate-200 text-sm mt-1">Organized by {selectedEvent.organizer.fullName || selectedEvent.organizer.name || 'Organizer'}</p>
                                     )}
                                 </div>
                                 <div className="p-6">
@@ -660,7 +782,7 @@ const UserDashboard = () => {
                                             <h4 className="text-sm font-semibold text-gray-900 mb-2">Required Skills</h4>
                                             <div className="flex flex-wrap gap-2">
                                                 {selectedEvent.requiredSkills.map((skill, i) => (
-                                                    <span key={i} className="text-sm bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg font-medium border border-indigo-200">{typeof skill === 'object' ? skill.name || skill.skill : skill}</span>
+                                                    <span key={i} className="text-sm bg-slate-100 text-slate-700 px-3 py-1 rounded-lg font-medium border border-slate-200">{typeof skill === 'object' ? skill.name || skill.skill : skill}</span>
                                                 ))}
                                             </div>
                                         </div>
@@ -678,11 +800,11 @@ const UserDashboard = () => {
                             {/* Right – Volunteers & Chat */}
                             <div className="space-y-6">
                                 {/* Volunteers list */}
-                                <div className="bg-white rounded-2xl shadow-md ring-1 ring-gray-200 overflow-hidden">
-                                    <div className="px-5 py-4 border-b border-gray-100 border-l-4 border-l-violet-400">
-                                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                                            <div className="w-6 h-6 bg-violet-100 rounded-lg flex items-center justify-center">
-                                                <Users size={14} className="text-violet-600" />
+                                <div className="dashboard-surface overflow-hidden">
+                                    <div className="px-5 py-4 border-b border-gray-100 border-l-4 border-l-amber-400">
+                                        <h3 className="dashboard-heading font-bold text-slate-900 flex items-center gap-2">
+                                            <div className="w-6 h-6 bg-amber-100 rounded-lg flex items-center justify-center">
+                                                <Users size={14} className="text-amber-700" />
                                             </div>
                                             Volunteers
                                         </h3>
@@ -695,13 +817,13 @@ const UserDashboard = () => {
                                                     const volName = typeof volunteer === 'object' ? (volunteer.fullName || volunteer.name || `Volunteer ${i + 1}`) : `Volunteer ${i + 1}`;
                                                     const volId = typeof volunteer === 'object' ? volunteer._id : volunteer;
                                                     return (
-                                                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-violet-50 transition-all cursor-pointer group" onClick={() => openChat(selectedEvent, { _id: volId, fullName: volName })}>
-                                                            <div className="w-9 h-9 bg-violet-100 rounded-lg flex items-center justify-center text-violet-600 text-sm font-bold">{volName.charAt(0)}</div>
+                                                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-amber-50 transition-all cursor-pointer group" onClick={() => openChat(selectedEvent, { _id: volId, fullName: volName })}>
+                                                            <div className="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center text-amber-700 text-sm font-bold">{volName.charAt(0)}</div>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="text-sm font-medium text-gray-900 truncate">{volName}</p>
                                                                 <p className="text-xs text-gray-400">Click to message</p>
                                                             </div>
-                                                            <MessageCircle size={16} className="text-gray-300 group-hover:text-violet-500 transition-colors" />
+                                                            <MessageCircle size={16} className="text-gray-300 group-hover:text-amber-600 transition-colors" />
                                                         </div>
                                                     );
                                                 })}
@@ -717,10 +839,10 @@ const UserDashboard = () => {
 
                                 {/* Chat panel */}
                                 {selectedVolunteer && (
-                                    <div className="bg-white rounded-2xl shadow-md ring-1 ring-gray-200 overflow-hidden">
-                                        <div className="px-5 py-3 border-b border-gray-100 bg-violet-50 flex items-center justify-between">
+                                    <div className="dashboard-surface overflow-hidden">
+                                        <div className="px-5 py-3 border-b border-gray-100 bg-slate-100 flex items-center justify-between">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center text-violet-600 text-xs font-bold">{selectedVolunteer.fullName?.charAt(0) || 'V'}</div>
+                                                <div className="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center text-slate-700 text-xs font-bold">{selectedVolunteer.fullName?.charAt(0) || 'V'}</div>
                                                 <div>
                                                     <p className="text-sm font-semibold text-gray-900">{selectedVolunteer.fullName}</p>
                                                     <p className="text-xs text-gray-500">Volunteer</p>
@@ -730,7 +852,7 @@ const UserDashboard = () => {
                                         </div>
                                         <div className="h-64 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
                                             {chatLoading ? (
-                                                <div className="flex items-center justify-center h-full"><div className="w-6 h-6 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div></div>
+                                                <div className="flex items-center justify-center h-full"><div className="w-6 h-6 border-2 border-slate-200 border-t-slate-600 rounded-full animate-spin"></div></div>
                                             ) : chatMessages.length === 0 ? (
                                                 <div className="flex items-center justify-center h-full"><p className="text-sm text-gray-400">No messages yet. Start the conversation!</p></div>
                                             ) : (
@@ -739,7 +861,7 @@ const UserDashboard = () => {
                                                         <div key={i} className={`flex ${msg.sender === user._id || msg.senderId === user._id ? 'justify-end' : 'justify-start'}`}>
                                                             <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${
                                                                 msg.sender === user._id || msg.senderId === user._id
-                                                                    ? 'bg-violet-500 text-white rounded-br-sm'
+                                                                    ? 'bg-slate-800 text-white rounded-br-sm'
                                                                     : 'bg-white text-gray-900 border border-gray-200 rounded-bl-sm shadow-sm'
                                                             }`}>
                                                                 {msg.content || msg.message}
@@ -752,8 +874,8 @@ const UserDashboard = () => {
                                         </div>
                                         <div className="p-3 border-t border-gray-100">
                                             <div className="flex gap-2">
-                                                <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMessage()} placeholder="Type a message..." className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none" />
-                                                <button onClick={sendMessage} disabled={!chatInput.trim()} className="p-2 bg-violet-500 hover:bg-violet-600 disabled:bg-gray-300 text-white rounded-xl transition-all">
+                                                <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMessage()} placeholder="Type a message..." className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none" />
+                                                <button onClick={sendMessage} disabled={!chatInput.trim()} className="p-2 bg-slate-800 hover:bg-slate-900 disabled:bg-gray-300 text-white rounded-xl transition-all">
                                                     <Send size={16} />
                                                 </button>
                                             </div>
@@ -767,10 +889,10 @@ const UserDashboard = () => {
 
                 {/* ════════ REQUESTS TAB ════════ */}
                 {activeTab === 'requests' && (
-                    <div className="bg-white rounded-2xl shadow-md ring-1 ring-gray-200 overflow-hidden">
+                    <div className="dashboard-surface overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100 border-l-4 border-l-teal-400 flex items-center justify-between">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900">My Help Requests</h3>
+                                <h3 className="dashboard-heading text-lg font-bold text-slate-900">My Help Requests</h3>
                                 <p className="text-sm text-gray-500">{myRequests.length} total request{myRequests.length !== 1 ? 's' : ''}</p>
                             </div>
                             <button onClick={() => setShowCreateRequest(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-all shadow-sm">
@@ -779,7 +901,7 @@ const UserDashboard = () => {
                         </div>
                         <div className="p-4">
                             {isLoading ? (
-                                <div className="flex items-center justify-center py-16"><div className="w-10 h-10 border-4 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div></div>
+                                <div className="flex items-center justify-center py-16"><div className="w-10 h-10 border-4 border-gray-200 border-t-slate-700 rounded-full animate-spin"></div></div>
                             ) : myRequests.length === 0 ? (
                                 <div className="text-center py-16">
                                     <div className="w-20 h-20 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4"><FileText className="text-slate-300" size={32} /></div>
@@ -829,7 +951,7 @@ const UserDashboard = () => {
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
-                                                <ChevronRight className="text-gray-300 group-hover:text-blue-500 transition-colors shrink-0 cursor-pointer" size={16} onClick={() => navigate(getRequestDetailRoute(request._id))} />
+                                                <ChevronRight className="text-gray-300 group-hover:text-slate-700 transition-colors shrink-0 cursor-pointer" size={16} onClick={() => navigate(getRequestDetailRoute(request._id))} />
                                             </div>
                                         );
                                     })}
@@ -850,10 +972,10 @@ const UserDashboard = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => {
                     setShowCreateRequest(false);
                 }}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <div className="dashboard-surface w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">Create Help Request</h3>
+                                <h3 className="dashboard-heading text-lg font-bold text-gray-900">Create Help Request</h3>
                                 <p className="text-sm text-gray-500">Describe what you need assistance with</p>
                             </div>
                             <button onClick={() => {
@@ -907,13 +1029,13 @@ const UserDashboard = () => {
             {/* ─── Delete Confirmation Modal ─── */}
             {deleteConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                    <div className="dashboard-surface max-w-md w-full p-6">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center">
                                 <AlertCircle className="text-red-600" size={24} />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">Delete Help Request</h3>
+                                <h3 className="dashboard-heading text-lg font-bold text-gray-900">Delete Help Request</h3>
                                 <p className="text-sm text-gray-500">This action cannot be undone</p>
                             </div>
                         </div>

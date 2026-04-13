@@ -1,49 +1,59 @@
-import React from 'react';
+import React from 'react'
+
+const cx = (...classes) => classes.filter(Boolean).join(' ')
 
 const Input = ({
     label,
+    hint,
     error,
     id,
     className = '',
     type = 'text',
     ...props
 }) => {
+    const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(' ') || undefined
+
     return (
         <div className="w-full">
             {label && (
-                <label htmlFor={id} className="block text-sm font-semibold text-gray-700 mb-2 transition-colors">
-                    {label} {props.required && <span className="text-red-500 ml-1">*</span>}
+                <label htmlFor={id} className="mb-2 block text-sm font-semibold text-slate-700">
+                    {label}
+                    {props.required && <span className="ml-1 text-red-500">*</span>}
                 </label>
             )}
-            <div className="relative group">
+
+            <div className="group relative">
                 <input
                     id={id}
                     type={type}
-                    className={`
-            block w-full rounded-lg border-2 px-4 py-2.5 text-gray-900 shadow-sm outline-none transition-all placeholder:text-gray-400
-            group-hover:shadow-md
-            focus:ring-2 focus:ring-primary-500 focus:border-primary-600 focus:shadow-lg
-            ${error
-                            ? 'border-red-300 bg-red-50 text-red-900 focus:ring-red-500 focus:border-red-600 placeholder:text-red-300'
-                            : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'
-                        }
-            ${className}
-          `}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={describedBy}
+                    className={cx(
+                        'block w-full rounded-xl border px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition-all placeholder:text-slate-400',
+                        'focus:border-primary-500 focus:ring-4 focus:ring-primary-100',
+                        error
+                            ? 'border-red-300 bg-red-50/70 text-red-900 focus:border-red-400 focus:ring-red-100'
+                            : 'border-slate-300 bg-white hover:border-slate-400',
+                        className
+                    )}
                     {...props}
                 />
-                {/* Animated bottom border on focus */}
-                <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-400 scale-x-0 group-focus-within:scale-x-100 transition-transform duration-300 origin-left rounded-b-lg`}></div>
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 rounded-b-xl bg-gradient-to-r from-primary-600 via-primary-500 to-accent-500 transition-transform duration-300 group-focus-within:scale-x-100" />
             </div>
+
+            {hint && !error && (
+                <p id={`${id}-hint`} className="mt-1.5 text-xs text-slate-500">
+                    {hint}
+                </p>
+            )}
+
             {error && (
-                <p className="mt-2 text-sm text-red-600 animate-fadeIn font-medium flex items-center gap-1">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18.101 12.93a1 1 0 00-1.414-1.414L10 14.586 7.314 11.9a1 1 0 00-1.414 1.414l3.5 3.5a1 1 0 001.414 0l8.5-8.5z" clipRule="evenodd" />
-                    </svg>
+                <p id={`${id}-error`} className="mt-1.5 text-sm font-medium text-red-600">
                     {error}
                 </p>
             )}
         </div>
-    );
-};
+    )
+}
 
-export default Input;
+export default Input

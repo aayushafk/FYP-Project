@@ -51,8 +51,9 @@ function AppContent() {
 
   return (
     <StatusProvider>
-      <Router>
-        <Routes>
+      <div className="app-shell">
+        <Router>
+          <Routes>
         <Route path="/" element={<Homepage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -230,8 +231,9 @@ function AppContent() {
 
         {/* Fallback route */}
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      </Router>
+          </Routes>
+        </Router>
+      </div>
     </StatusProvider>
   )
 }

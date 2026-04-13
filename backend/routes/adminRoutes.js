@@ -88,6 +88,7 @@ router.patch('/verify-organizer/:id', async (req, res) => {
         if (!user) return res.status(404).json({ message: 'Organizer not found' });
 
         user.isAdminVerified = true;
+        user.isDisabled = false;
         await user.save();
 
         // Notify organizer
@@ -98,7 +99,7 @@ router.patch('/verify-organizer/:id', async (req, res) => {
             relatedId: req.user._id
         });
 
-        res.json({ message: 'Organizer verified and notified successfully', user });
+        res.json({ message: 'Organizer verified and re-enabled successfully', user });
     } catch (error) {
         res.status(500).json({ message: 'Error verifying organizer', error: error.message });
     }
@@ -122,21 +123,26 @@ router.get('/organizer-activity/:organizerId', async (req, res) => {
 // GET /api/admin/analytics/help-requests - Get system-wide help request analytics
 router.get('/analytics/help-requests', async (req, res) => {
     try {
+        const helpRequestFilter = { type: 'citizen' };
+
         // Total requests
-        const totalRequests = await Request.countDocuments();
+        const totalRequests = await Event.countDocuments(helpRequestFilter);
 
         // Requests by status
-        const requestsByStatus = await Request.aggregate([
-            { $group: { _id: '$status', count: { $sum: 1 } } }
+        const requestsByStatus = await Event.aggregate([
+            { $match: helpRequestFilter },
+            { $group: { _id: '$trackingStatus', count: { $sum: 1 } } }
         ]);
 
         // Requests by category
-        const requestsByCategory = await Request.aggregate([
+        const requestsByCategory = await Event.aggregate([
+            { $match: helpRequestFilter },
             { $group: { _id: '$category', count: { $sum: 1 } } }
         ]);
 
         // Requests by location (group by location string)
-        const requestsByLocation = await Request.aggregate([
+        const requestsByLocation = await Event.aggregate([
+            { $match: helpRequestFilter },
             { 
                 $group: { 
                     _id: '$location', 
@@ -148,11 +154,16 @@ router.get('/analytics/help-requests', async (req, res) => {
         ]);
 
         // Active volunteers (volunteers who have been assigned to requests)
-        const activeVolunteers = await Request.distinct('assignedTo', { assignedTo: { $ne: null } });
+        const activeVolunteers = await Event.aggregate([
+            { $match: helpRequestFilter },
+            { $unwind: { path: '$assignedVolunteers', preserveNullAndEmptyArrays: false } },
+            { $group: { _id: '$assignedVolunteers' } }
+        ]);
 
         // Average completion time (for completed requests)
-        const completedRequests = await Request.find({ 
-            status: 'Completed',
+        const completedRequests = await Event.find({ 
+            ...helpRequestFilter,
+            trackingStatus: 'Completed',
             createdAt: { $exists: true }
         }).select('createdAt updatedAt');
 
@@ -168,10 +179,13 @@ router.get('/analytics/help-requests', async (req, res) => {
         // Monthly growth (last 6 months)
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        sixMonthsAgo.setDate(1);
+        sixMonthsAgo.setHours(0, 0, 0, 0);
 
-        const monthlyGrowth = await Request.aggregate([
+        const monthlyGrowthRaw = await Event.aggregate([
             { 
                 $match: { 
+                    ...helpRequestFilter,
                     createdAt: { $gte: sixMonthsAgo } 
                 } 
             },
@@ -186,6 +200,33 @@ router.get('/analytics/help-requests', async (req, res) => {
             },
             { $sort: { '_id.year': 1, '_id.month': 1 } }
         ]);
+
+        // Zero-fill months so the chart always reaches current month.
+        const monthlyGrowthMap = new Map(
+            monthlyGrowthRaw.map(item => [
+                `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
+                item.count
+            ])
+        );
+
+        const monthlyGrowth = [];
+        const cursor = new Date(sixMonthsAgo);
+        const now = new Date();
+
+        while (cursor <= now) {
+            const year = cursor.getFullYear();
+            const month = cursor.getMonth() + 1;
+            const label = `${year}-${String(month).padStart(2, '0')}`;
+
+            monthlyGrowth.push({
+                year,
+                month,
+                count: monthlyGrowthMap.get(label) || 0,
+                label
+            });
+
+            cursor.setMonth(cursor.getMonth() + 1);
+        }
 
         res.json({
             totalRequests,
@@ -203,12 +244,7 @@ router.get('/analytics/help-requests', async (req, res) => {
             })),
             activeVolunteersCount: activeVolunteers.length,
             avgCompletionTimeHours: avgCompletionTime,
-            monthlyGrowth: monthlyGrowth.map(item => ({
-                year: item._id.year,
-                month: item._id.month,
-                count: item.count,
-                label: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`
-            }))
+            monthlyGrowth
         });
     } catch (error) {
         console.error('Error fetching admin analytics:', error);

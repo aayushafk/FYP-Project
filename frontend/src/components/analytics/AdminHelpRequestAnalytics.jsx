@@ -16,11 +16,34 @@ const AdminHelpRequestAnalytics = () => {
 
   useEffect(() => {
     fetchAnalytics();
+
+    // Keep analytics up to date while admin is viewing this page.
+    const intervalId = setInterval(fetchAnalytics, 10000);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchAnalytics();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      fetchAnalytics();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
   }, []);
 
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await api.get('/admin/analytics/help-requests');
       setAnalytics(response.data);
     } catch (err) {
@@ -78,8 +101,8 @@ const AdminHelpRequestAnalytics = () => {
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
         <div className="flex items-center gap-3 mb-2">
-          <BarChart3 size={32} />
-          <h2 className="text-2xl font-bold">Help Request Analytics</h2>
+          <BarChart3 size={32} className="text-white" />
+          <h2 className="text-2xl font-bold text-white">Help Request Analytics</h2>
         </div>
         <p className="text-blue-100">System-wide help request insights and trends</p>
       </div>
