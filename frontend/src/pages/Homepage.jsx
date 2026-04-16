@@ -99,7 +99,7 @@ const Homepage = () => {
   return (
     <div className="min-h-screen text-slate-900">
       <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl">
-        <div className="readable-content px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-12">
           <div className="flex h-16 items-center justify-between">
             <Link to="/" className="inline-flex items-center gap-3">
               <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary-600 to-accent-600 text-lg font-bold text-white shadow-md">
