@@ -210,6 +210,26 @@ router.post('/register', async (req, res) => {
     })
   } catch (error) {
     console.error('Registration error:', error)
+
+    if (error?.name === 'ValidationError') {
+      const validationMessages = Object.values(error.errors || {}).map((item) => item.message)
+      return res.status(400).json({
+        message: validationMessages[0] || 'Validation failed during registration',
+        errors: validationMessages
+      })
+    }
+
+    if (error?.code === 11000) {
+      const duplicateField = Object.keys(error.keyPattern || {})[0]
+      if (duplicateField === 'email') {
+        return res.status(400).json({ message: 'User with this email already exists' })
+      }
+      if (duplicateField === 'officialEmail') {
+        return res.status(400).json({ message: 'Organization with this official email already exists' })
+      }
+      return res.status(400).json({ message: 'Duplicate value found. Please use different details.' })
+    }
+
     res.status(500).json({
       message: 'Server error during registration',
       error: error.message

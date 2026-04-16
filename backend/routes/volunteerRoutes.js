@@ -10,7 +10,7 @@ import {
     getSkillMatchedRequests,
     notifyVolunteersByRequestSkills 
 } from '../services/skillService.js';
-import { VOLUNTEER_SKILLS, validateSkills } from '../utils/skills.js';
+import { VOLUNTEER_SKILLS, validateSkills } from '../uploads/utils/skills.js';
 import * as volunteerController from '../controllers/volunteerController.js';
 
 const router = express.Router();

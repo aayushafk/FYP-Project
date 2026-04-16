@@ -22,7 +22,7 @@ import feedbackRoutes from './routes/feedbackRoutes.js'
 import EventMessage from './models/EventMessage.js'
 import UserVolunteerMessage from './models/UserVolunteerMessage.js'
 import Event from './models/Event.js'
-import { setIo } from './utils/socketManager.js'
+import { setIo } from './uploads/utils/socketManager.js'
 
 // Get __dirname equivalent for ES6 modules
 const __filename = fileURLToPath(import.meta.url)

@@ -7,7 +7,7 @@ import EventMessage from '../models/EventMessage.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { checkRole } from '../middlewares/roleMiddleware.js';
 import { notifyVolunteersBySkills, getSkillAnalytics } from '../services/skillService.js';
-import { validateSkills } from '../utils/skills.js';
+import { validateSkills } from '../uploads/utils/skills.js';
 import * as organizerController from '../controllers/organizerController.js';
 
 const router = express.Router();

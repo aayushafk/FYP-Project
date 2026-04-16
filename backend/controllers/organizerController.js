@@ -2,7 +2,7 @@ import Event from '../models/Event.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import { notifyVolunteersBySkills } from '../services/skillService.js';
-import { validateSkills } from '../utils/skills.js';
+import { validateSkills } from '../uploads/utils/skills.js';
 
 /**
  * Create a new event (organizer-created)

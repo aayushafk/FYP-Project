@@ -2,7 +2,7 @@ import Event from '../models/Event.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import { getSkillMatchedEvents } from '../services/skillService.js';
-import { getIo } from '../utils/socketManager.js';
+import { getIo } from '../uploads/utils/socketManager.js';
 
 const emitVolunteerStatusUpdate = ({ eventId, volunteerId, volunteerName, fromStatus, newStatus }) => {
   const io = getIo();
