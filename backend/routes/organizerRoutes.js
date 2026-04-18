@@ -8,6 +8,7 @@ import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { checkRole } from '../middlewares/roleMiddleware.js';
 import { notifyVolunteersBySkills, getSkillAnalytics } from '../services/skillService.js';
 import { validateSkills } from '../uploads/utils/skills.js';
+import { getActiveVolunteerCount } from '../uploads/utils/socketManager.js';
 import * as organizerController from '../controllers/organizerController.js';
 
 const router = express.Router();
@@ -283,6 +284,24 @@ router.get('/events/:eventId', isVerified, async (req, res) => {
             message: 'Error fetching event details', 
             error: error.message 
         });
+    }
+});
+
+// GET /api/organizer/dashboard/volunteer-stats - Active volunteer presence and total registered volunteers
+router.get('/dashboard/volunteer-stats', async (req, res) => {
+    try {
+        const totalVolunteers = await User.countDocuments({
+            role: 'volunteer',
+            isDisabled: { $ne: true }
+        });
+
+        res.json({
+            activeVolunteers: getActiveVolunteerCount(),
+            totalVolunteers
+        });
+    } catch (error) {
+        console.error('Error fetching organizer volunteer stats:', error);
+        res.status(500).json({ message: 'Error fetching volunteer stats', error: error.message });
     }
 });
 

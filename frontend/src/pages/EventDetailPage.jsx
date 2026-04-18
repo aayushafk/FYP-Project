@@ -914,7 +914,7 @@ const EventDetailPage = () => {
               ? 'bg-gradient-to-r from-red-500 to-red-600'
               : 'bg-gradient-to-r from-blue-600 to-indigo-600'
           }`}>
-            <h2 className="text-2xl font-bold mb-2">Event Participation Confirmation</h2>
+            <h2 className="text-2xl font-bold mb-2 text-white">Event Participation Confirmation</h2>
             <p className={event.isEmergency && event.type === 'citizen' ? 'text-red-100' : 'text-blue-100'}>
               Please review the event details and confirm your participation
             </p>

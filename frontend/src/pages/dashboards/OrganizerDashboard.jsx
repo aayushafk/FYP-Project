@@ -5,6 +5,7 @@ import Button from '../../components/ui/Button';
 import Alert from '../../components/ui/Alert';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
+import socketService from '../../services/socketService';
 
 const OrganizerDashboard = () => {
     const navigate = useNavigate();
@@ -13,9 +14,28 @@ const OrganizerDashboard = () => {
     const isVerified = Boolean(safeUser.isAdminVerified); // Backend field is isAdminVerified
 
     const [events, setEvents] = useState([]);
+    const [volunteerStats, setVolunteerStats] = useState({
+        activeVolunteers: 0,
+        totalVolunteers: 0
+    });
 
     useEffect(() => {
         fetchEvents();
+        fetchVolunteerStats();
+
+        const socket = socketService.initializeSocket();
+        const handleVolunteerStatsUpdated = (payload = {}) => {
+            setVolunteerStats((previous) => ({
+                ...previous,
+                ...payload
+            }));
+        };
+
+        socket.on('organizerVolunteerStatsUpdated', handleVolunteerStatsUpdated);
+
+        return () => {
+            socket.off('organizerVolunteerStatsUpdated', handleVolunteerStatsUpdated);
+        };
     }, []);
 
     const fetchEvents = async () => {
@@ -31,6 +51,23 @@ const OrganizerDashboard = () => {
         } catch (error) {
             console.error('Error fetching events:', error);
             setEvents([]);
+        }
+    };
+
+    const fetchVolunteerStats = async () => {
+        try {
+            const response = await api.get('/organizer/dashboard/volunteer-stats');
+            const payload = response?.data || {};
+            setVolunteerStats({
+                activeVolunteers: Number(payload.activeVolunteers || 0),
+                totalVolunteers: Number(payload.totalVolunteers || 0)
+            });
+        } catch (error) {
+            console.error('Error fetching volunteer stats:', error);
+            setVolunteerStats({
+                activeVolunteers: 0,
+                totalVolunteers: 0
+            });
         }
     };
 
@@ -119,8 +156,9 @@ const OrganizerDashboard = () => {
                                     <span className="text-sm text-gray-700 font-semibold">Total Events</span>
                                 </div>
                                 <div className="p-6 bg-gray-50 rounded-lg border border-gray-200 hover:shadow-md hover:scale-105 transition-all cursor-pointer">
-                                    <span className="block text-4xl font-bold text-green-600 mb-1">120</span>
-                                    <span className="text-sm text-gray-700 font-semibold">Volunteers</span>
+                                    <span className="block text-4xl font-bold text-green-600 mb-1">{volunteerStats.activeVolunteers}</span>
+                                    <span className="text-sm text-gray-700 font-semibold">Active Volunteers</span>
+                                    <span className="block text-xs text-gray-500 mt-1">of {volunteerStats.totalVolunteers} registered</span>
                                 </div>
                                 <div className="p-6 bg-gray-50 rounded-lg border border-gray-200 hover:shadow-md hover:scale-105 transition-all cursor-pointer">
                                     <span className="block text-4xl font-bold text-orange-600 mb-1">4.8</span>

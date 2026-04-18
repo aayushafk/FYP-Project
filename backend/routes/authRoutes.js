@@ -4,6 +4,10 @@ import User from '../models/User.js'
 import Notification from '../models/Notification.js'
 import { authMiddleware } from '../middlewares/authMiddleware.js'
 import { JWT_SECRET } from '../config/env.js'
+import {
+  getActiveVolunteerCount,
+  emitOrganizerVolunteerStatsUpdated
+} from '../uploads/utils/socketManager.js'
 
 const router = express.Router()
 
@@ -178,6 +182,23 @@ router.post('/register', async (req, res) => {
         }
       } catch (notifyError) {
         console.error('Failed to notify admins of new organizer:', notifyError);
+      }
+    }
+
+    if (role === 'volunteer') {
+      try {
+        const totalVolunteers = await User.countDocuments({
+          role: 'volunteer',
+          isDisabled: { $ne: true }
+        })
+
+        emitOrganizerVolunteerStatsUpdated({
+          activeVolunteers: getActiveVolunteerCount(),
+          totalVolunteers,
+          reason: 'volunteer_registered'
+        })
+      } catch (statsEmitError) {
+        console.error('Failed to emit organizer volunteer stats update:', statsEmitError)
       }
     }
 

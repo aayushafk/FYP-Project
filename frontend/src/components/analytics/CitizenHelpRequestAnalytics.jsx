@@ -68,7 +68,7 @@ const CitizenHelpRequestAnalytics = () => {
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
         <div className="flex items-center gap-3 mb-2">
           <BarChart3 size={32} />
-          <h2 className="text-2xl font-bold">My Help Request Analytics</h2>
+          <h2 className="text-2xl font-bold text-white" style={{ color: '#ffffff' }}>My Help Request Analytics</h2>
         </div>
         <p className="text-indigo-100">Track your help request progress and statistics</p>
       </div>

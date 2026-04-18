@@ -686,9 +686,9 @@ const HelpRequestDetail = () => {
             }`}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
-                  <h1 className="text-3xl font-bold mb-2">{request.title}</h1>
+                  <h1 className="text-3xl font-bold mb-2 text-white">{request.title}</h1>
                   <div className="flex items-center gap-3 text-amber-100">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-white/20 backdrop-blur-sm">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold text-white bg-white/20 backdrop-blur-sm">
                       {request.isEmergency ? '🚨 EMERGENCY' : '🆘 Help Request'}
                     </span>
                     <span className={`px-3 py-1 rounded-lg text-xs font-semibold border ${getStatusColor(request.trackingStatus || request.status)}`}>

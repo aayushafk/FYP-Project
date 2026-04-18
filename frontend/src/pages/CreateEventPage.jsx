@@ -168,7 +168,7 @@ const CreateEventPage = () => {
         <div className="white-background rounded-lg shadow-xl overflow-hidden">
           {/* Title Section */}
           <div style={{background: 'linear-gradient(to right, var(--primary-600), var(--primary-700))'}} className="px-6 py-8 text-white">
-            <h1 className="text-3xl font-bold mb-2">Create New Event</h1>
+            <h1 className="text-3xl font-bold mb-2 text-white">Create New Event</h1>
             <p style={{color: '#bfdbfe'}}>Set up a volunteer event and find the right volunteers for your cause</p>
           </div>
 

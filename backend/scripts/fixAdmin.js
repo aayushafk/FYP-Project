@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import User from '../models/User.js';
+import '../config/env.js';
 
-const MONGO_URI = 'mongodb://127.0.0.1:27017/unityaid';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/unityaid';
 
 const fixAdmin = async () => {
     try {

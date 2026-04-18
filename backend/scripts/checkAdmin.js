@@ -11,7 +11,7 @@ const checkAdmin = async () => {
         await mongoose.connect(MONGO_URI);
         console.log('Connected to MongoDB');
 
-        const admins = await User.find({ role: 'Admin' });
+        const admins = await User.find({ role: 'admin' });
         console.log(`Found ${admins.length} admin(s):`);
         admins.forEach(admin => {
             console.log(`- ${admin.email} (Verified: ${admin.isVerified})`);

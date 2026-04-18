@@ -22,7 +22,14 @@ import feedbackRoutes from './routes/feedbackRoutes.js'
 import EventMessage from './models/EventMessage.js'
 import UserVolunteerMessage from './models/UserVolunteerMessage.js'
 import Event from './models/Event.js'
-import { setIo } from './uploads/utils/socketManager.js'
+import {
+  setIo,
+  registerActiveConnection,
+  removeActiveConnection,
+  getActiveVolunteerCount,
+  getOrganizerDashboardRoom,
+  emitOrganizerVolunteerStatsUpdated
+} from './uploads/utils/socketManager.js'
 
 // Get __dirname equivalent for ES6 modules
 const __filename = fileURLToPath(import.meta.url)
@@ -134,6 +141,29 @@ app.get('/api/health', (req, res) => {
 // Socket.IO Event Handlers
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`)
+
+  if (socket.isAuthenticated && socket.user) {
+    registerActiveConnection({
+      userId: socket.user._id,
+      role: socket.user.role,
+      socketId: socket.id
+    })
+
+    if (socket.user.role === 'organizer') {
+      socket.join(getOrganizerDashboardRoom())
+      socket.emit('organizerVolunteerStatsUpdated', {
+        activeVolunteers: getActiveVolunteerCount(),
+        reason: 'organizer_connected'
+      })
+    }
+
+    if (socket.user.role === 'volunteer') {
+      emitOrganizerVolunteerStatsUpdated({
+        activeVolunteers: getActiveVolunteerCount(),
+        reason: 'volunteer_presence_changed'
+      })
+    }
+  }
 
   // Join event chat room
   socket.on('joinEventChat', (data) => {
@@ -456,6 +486,21 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`)
+
+    if (socket.isAuthenticated && socket.user) {
+      removeActiveConnection({
+        userId: socket.user._id,
+        socketId: socket.id
+      })
+
+      if (socket.user.role === 'volunteer') {
+        emitOrganizerVolunteerStatsUpdated({
+          activeVolunteers: getActiveVolunteerCount(),
+          reason: 'volunteer_presence_changed'
+        })
+      }
+    }
+
     if (socket.eventId) {
       const roomName = `event_${socket.eventId}`
       io.to(roomName).emit('userLeft', {
