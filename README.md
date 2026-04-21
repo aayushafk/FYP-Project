@@ -1,6 +1,97 @@
 # UnityAid
 
-UnityAid is a MERN-based volunteer coordination platform.
+UnityAid is a volunteer coordination platform designed to connect volunteers, organizations, and administrators in one place.
+
+## Project Guidance: How to Use the System
+
+UnityAid helps people find volunteer opportunities, manage applications, and keep platform activity organized. Use the platform based on your role:
+
+### Volunteer
+
+Use this role if you want to find and apply for volunteer opportunities.
+
+#### 1. Register
+- Open the platform and select **Sign Up** or **Register**.
+- Enter your name, email address, password, and any other required details.
+- Submit the form to create your volunteer account.
+
+#### 2. Log In
+- Go to the **Login** page.
+- Enter your email address and password.
+- Click **Login** to open your dashboard.
+
+#### 3. Browse Opportunities
+- Go to the **Opportunities** or **Events** section.
+- Review available volunteer roles, event details, dates, locations, and required skills.
+- Choose an opportunity that matches your interests and availability.
+
+#### 4. Apply for an Opportunity
+- Open the opportunity details page.
+- Click **Apply** and provide any information requested.
+- Submit your application and wait for the organization to review it.
+
+#### 5. Track Your Applications
+- Open **My Applications** or your dashboard.
+- Check the status of each application, such as **Pending**, **Approved**, or **Rejected**.
+- Review any updates or messages from the organization.
+
+**Tip:** Keep your profile updated so organizations can better match you with suitable opportunities.
+
+### Organization / NGO
+
+Use this role if you want to post opportunities and manage volunteers.
+
+#### 1. Log In
+- Sign in with your organization account.
+- Open the organization dashboard.
+
+#### 2. Post Opportunities
+- Select **Create Opportunity** or **Post Event**.
+- Enter the title, description, date, time, location, required skills, and volunteer needs.
+- Review the details and publish the opportunity.
+
+#### 3. Manage Applicants
+- Open the **Applicants** or **Applications** section.
+- Review volunteer profiles and submitted application details.
+- Compare applicants based on skills, availability, and suitability.
+
+#### 4. Approve or Reject Volunteers
+- Select each applicant and choose **Approve** or **Reject**.
+- Approved volunteers can be contacted for the next steps.
+- Rejected applicants will see the updated status in the system.
+
+**Tip:** Clear opportunity descriptions usually attract more suitable applicants.
+
+### Admin
+
+Use this role if you are responsible for overseeing platform activity and user management.
+
+#### 1. Log In to the Admin Panel
+- Sign in using your administrator credentials.
+- Open the admin dashboard to view system activity.
+
+#### 2. Manage Users
+- View volunteer and organization accounts.
+- Update, activate, or remove accounts when needed.
+- Monitor user access and account status.
+
+#### 3. Monitor Activities
+- Review posted opportunities, applications, and user interactions.
+- Watch for unusual or inappropriate activity.
+- Keep the system organized and reliable.
+
+#### 4. Handle Reports and Feedback
+- Open the **Reports** or **Feedback** section.
+- Review issues, complaints, and suggestions.
+- Take action where needed to maintain a safe platform.
+
+**Tip:** Regular monitoring helps keep the platform trustworthy for all users.
+
+### Helpful Notes
+- Use accurate information when registering or posting opportunities.
+- Check your dashboard regularly for updates and messages.
+- Organizations should review applications promptly so volunteers are not left waiting.
+- If you have trouble logging in or accessing your account, contact the system administrator.
 
 This workspace is now separated into dedicated projects:
 
@@ -47,115 +138,4 @@ npm run build
 
 - Frontend API requests are proxied to backend via Vite config.
 - Keep all client-side code inside frontend and server-side code inside backend to avoid duplication.
-
-## Project Guidance: How to Use the System
-
-### Introduction
-The Volunteer Coordination Platform helps connect volunteers with organizations and community needs in one place.
-It is built with React.js for the frontend, Node.js/Express.js for the backend, and PostgreSQL for data management.
-
-Use this guide to understand how to use the system based on your role.
-
----
-
-## 1. Volunteer Guide
-
-### 1.1 Register Your Account
-1. Open the platform home page.
-2. Select Sign Up.
-3. Choose Volunteer as your role.
-4. Fill in your details (name, email, password, contact details, skills, and availability).
-5. Submit the registration form.
-
-Tip: Use an active email address so you do not miss updates.
-
-### 1.2 Log In
-1. Select Log In.
-2. Enter your email and password.
-3. Open your Volunteer Dashboard.
-
-### 1.3 Browse Opportunities
-1. Go to the Opportunities section.
-2. Use filters such as location, date, cause area, or required skills.
-3. Open an opportunity to view full details.
-
-### 1.4 Apply for Opportunities
-1. Open the opportunity details page.
-2. Select Apply.
-3. Complete the required fields.
-4. Submit your application.
-
-Note: Some opportunities may close automatically after the deadline.
-
-### 1.5 Track Your Applications
-1. Go to My Applications in your dashboard.
-2. Check statuses such as Pending, Approved, or Rejected.
-3. Open application entries to read organization messages and next steps.
-
----
-
-## 2. Organization/NGO Guide
-
-### 2.1 Register or Log In
-1. Create an account and choose Organization/NGO role, or log in to your existing account.
-2. Complete your organization profile.
-
-### 2.2 Post Opportunities
-1. Open Create Opportunity.
-2. Enter the opportunity information:
-	- Title
-	- Description and tasks
-	- Required skills
-	- Date, time, and location
-	- Number of volunteers needed
-	- Application deadline
-3. Publish the opportunity.
-
-Tip: Clear opportunity descriptions help attract suitable volunteers.
-
-### 2.3 Manage Applicants
-1. Open your posted opportunity.
-2. Go to Applicants.
-3. Review volunteer profiles and application details.
-
-### 2.4 Approve or Reject Volunteers
-1. Select an applicant.
-2. Choose Approve or Reject.
-3. Send a short response message when needed.
-
-### 2.5 Monitor Active Opportunities
-1. Use your dashboard to track application counts and approved volunteers.
-2. Update or close opportunities when positions are filled.
-
----
-
-## 3. Admin Guide
-
-### 3.1 Access Admin Dashboard
-1. Log in using an admin account.
-2. Open the Admin Dashboard panel.
-
-### 3.2 Manage Users
-1. Go to User Management.
-2. Search and filter by role or status.
-3. Update roles, activate accounts, or suspend accounts if required.
-
-### 3.3 Monitor Activities
-1. Review platform activity metrics.
-2. Track registrations, posted opportunities, applications, and approvals.
-
-### 3.4 Handle Reports and Feedback
-1. Open the Reports or Feedback section.
-2. Review submitted issues.
-3. Take action and mark resolved cases.
-
-Tip: Regular report reviews help keep the platform safe and reliable.
-
----
-
-## General Tips for All Users
-- Keep your profile and contact details up to date.
-- Check notifications regularly.
-- Use clear and respectful communication.
-- Contact support through the platform if you face account or login issues.
 
