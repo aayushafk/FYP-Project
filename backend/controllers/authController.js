@@ -325,7 +325,7 @@ export const adminLogin = async (req, res) => {
     // Check if user is Admin
     if (user.role.toLowerCase() !== 'admin') {
       return res.status(403).json({
-        message: 'Access denied. Administrator privileges required.'
+        message: 'You are not authorized to access the admin portal.'
       })
     }
 

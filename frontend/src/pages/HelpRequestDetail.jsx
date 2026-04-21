@@ -671,7 +671,7 @@ const HelpRequestDetail = () => {
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">🚨</span>
                   <div>
-                    <h3 className="text-xl font-bold uppercase tracking-wide">Emergency Request</h3>
+                    <h3 className="text-xl font-bold uppercase tracking-wide text-white">Emergency Request</h3>
                     <p className="text-red-100 text-sm">This citizen requires immediate assistance. Urgent action needed!</p>
                   </div>
                 </div>

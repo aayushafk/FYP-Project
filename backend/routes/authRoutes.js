@@ -359,8 +359,8 @@ router.post('/admin/login', async (req, res) => {
 
     // Check if user is Admin
     if (user.role.toLowerCase() !== 'admin') {
-      return res.status(401).json({
-        message: 'Invalid credentials'
+      return res.status(403).json({
+        message: 'You are not authorized to access the admin portal.'
       })
     }
 

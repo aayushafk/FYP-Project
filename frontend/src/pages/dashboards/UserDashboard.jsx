@@ -754,7 +754,7 @@ const UserDashboard = () => {
                             <div className="lg:col-span-2 dashboard-surface overflow-hidden">
                                 <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 p-6 text-white">
                                     <span className="inline-block text-xs font-semibold px-3 py-1 rounded-lg capitalize bg-white/20 text-white border border-white/20 backdrop-blur mb-3">{selectedEvent.status}</span>
-                                    <h2 className="dashboard-heading text-2xl font-bold">{selectedEvent.title}</h2>
+                                    <h2 className="dashboard-heading text-2xl font-bold text-white">{selectedEvent.title}</h2>
                                     {selectedEvent.organizer && (
                                         <p className="text-slate-200 text-sm mt-1">Organized by {selectedEvent.organizer.fullName || selectedEvent.organizer.name || 'Organizer'}</p>
                                     )}

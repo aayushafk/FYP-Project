@@ -32,7 +32,13 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const requestUrl = String(error.config?.url || '').toLowerCase()
+    const isAuthRequest =
+      requestUrl.includes('/auth/login') ||
+      requestUrl.includes('/auth/admin/login') ||
+      requestUrl.includes('/auth/register')
+
+    if (error.response?.status === 401 && !isAuthRequest) {
       // Unauthorized - clear storage and redirect to login
       localStorage.removeItem('token')
       localStorage.removeItem('user')

@@ -52,14 +52,17 @@ const AdminLogin = () => {
       navigate('/admin/dashboard', { replace: true })
     } catch (error) {
       console.error('Admin Login error:', error)
-      const isUnauthorized = error.response?.status === 401
-      const errorMessage = isUnauthorized
-        ? 'Invalid credentials'
-        : (
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Login failed. Please try again.'
-        )
+      const status = error.response?.status
+      const backendMessage = error.response?.data?.message || error.response?.data?.error
+
+      let errorMessage = 'Login failed. Please try again.'
+      if (status === 401) {
+        errorMessage = backendMessage || 'Invalid credentials'
+      } else if (status === 403) {
+        errorMessage = backendMessage || 'You are not authorized to access the admin portal.'
+      } else {
+        errorMessage = backendMessage || errorMessage
+      }
       setLoginError(errorMessage)
     } finally {
       setIsLoading(false)
